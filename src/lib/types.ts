@@ -24,6 +24,15 @@ export interface Student {
   synced: 0 | 1;
 }
 
+// Audio waiting to be transcribed. Keyed by the feedback entry it belongs to and
+// held locally until Whisper returns a transcript, so a recording is never lost
+// to bad signal or a rate limit.
+export interface PendingRecording {
+  id: string;
+  blob: Blob;
+  created_at: string;
+}
+
 export interface FeedbackEntry {
   id: string;
   student_id: string;

@@ -86,5 +86,6 @@ export async function pendingCount(): Promise<number> {
   const se = await db.sessions.where("synced").equals(0).count();
   const st = await db.students.where("synced").equals(0).count();
   const e = await db.entries.where("synced").equals(0).count();
-  return se + st + e;
+  const rec = await db.recordings.count();
+  return se + st + e + rec;
 }

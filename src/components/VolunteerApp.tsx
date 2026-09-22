@@ -5,6 +5,7 @@ import Link from "next/link";
 import { useLiveQuery } from "dexie-react-hooks";
 import { db, newId } from "@/lib/db";
 import { pendingCount, syncDown, syncUp } from "@/lib/sync";
+import { processPendingRecordings } from "@/lib/transcription";
 import { getVolunteerName, setVolunteerName } from "@/lib/auth";
 import { useOnline } from "@/lib/useOnline";
 import type { Session, Student, FeedbackEntry } from "@/lib/types";
@@ -52,6 +53,7 @@ export default function VolunteerApp({ busId }: { busId: string }) {
   useEffect(() => {
     const run = async () => {
       await syncDown();
+      await processPendingRecordings();
       await syncUp();
       setPending(await pendingCount());
     };
@@ -78,7 +80,10 @@ export default function VolunteerApp({ busId }: { busId: string }) {
         ) ?? null
       : null;
 
-  const flushSync = () => syncUp().then(async () => setPending(await pendingCount()));
+  const flushSync = () =>
+    processPendingRecordings()
+      .then(syncUp)
+      .then(async () => setPending(await pendingCount()));
 
   async function addStudent(name: string) {
     await db.students.add({
@@ -110,10 +115,23 @@ export default function VolunteerApp({ busId }: { busId: string }) {
     ai_summary: string | null;
     marks: number | null;
     notes: string;
+    pendingAudio: Blob | null;
   }) {
     if (!activeStudent || !activeSession) return;
+    const entryId = payload.id ?? newId();
+
+    if (payload.pendingAudio) {
+      // Couldn't transcribe yet (offline or rate limited) — hold the audio
+      // against this entry so the sync loop can finish the job later.
+      await db.recordings.put({
+        id: entryId,
+        blob: payload.pendingAudio,
+        created_at: new Date().toISOString(),
+      });
+    }
+
     await db.entries.put({
-      id: payload.id ?? newId(),
+      id: entryId,
       student_id: activeStudent.id,
       bus_id: busId,
       session_id: activeSession.id,

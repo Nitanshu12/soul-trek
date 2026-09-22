@@ -1,8 +1,21 @@
 "use client";
 
-import { useCallback, useEffect, useRef, useState } from "react";
+import { useState } from "react";
 import type { FeedbackEntry, Session, Student } from "@/lib/types";
-import { useSpeechRecognition } from "@/lib/useSpeechRecognition";
+import { useAudioRecorder } from "@/lib/useAudioRecorder";
+import {
+  RateLimitedError,
+  summarizeTranscript,
+  transcribeAudio,
+} from "@/lib/transcription";
+
+type Stage = "idle" | "transcribing" | "summarizing";
+
+function formatDuration(totalSeconds: number) {
+  const m = Math.floor(totalSeconds / 60);
+  const s = totalSeconds % 60;
+  return `${m}:${s.toString().padStart(2, "0")}`;
+}
 
 export default function FeedbackSheet({
   student,
@@ -23,69 +36,67 @@ export default function FeedbackSheet({
     ai_summary: string | null;
     marks: number | null;
     notes: string;
+    pendingAudio: Blob | null;
   }) => void;
 }) {
-  const speech = useSpeechRecognition(existingEntry?.transcript ?? "");
+  const recorder = useAudioRecorder();
   const [transcript, setTranscript] = useState(existingEntry?.transcript ?? "");
   const [aiSummary, setAiSummary] = useState(existingEntry?.ai_summary ?? "");
-  const [summarizing, setSummarizing] = useState(false);
-  const [summaryError, setSummaryError] = useState<string | null>(null);
   const [marks, setMarks] = useState<number | null>(existingEntry?.marks ?? null);
   const [notes, setNotes] = useState(existingEntry?.notes ?? "");
 
-  const transcriptRef = useRef(transcript);
-  const wasListeningRef = useRef(false);
+  const [stage, setStage] = useState<Stage>("idle");
+  const [notice, setNotice] = useState<string | null>(null);
+  // Audio that still needs transcribing — saved with the entry and retried later.
+  const [pendingAudio, setPendingAudio] = useState<Blob | null>(null);
 
-  useEffect(() => {
-    // eslint-disable-next-line react-hooks/set-state-in-effect -- mirrors the speech engine's running transcript
-    if (speech.transcript) setTranscript(speech.transcript);
-  }, [speech.transcript]);
+  const busy = stage !== "idle";
 
-  useEffect(() => {
-    transcriptRef.current = transcript;
-  }, [transcript]);
-
-  const generateSummary = useCallback(async () => {
-    const text = transcriptRef.current.trim();
-    if (!text) return;
-    setSummarizing(true);
-    setSummaryError(null);
+  async function runSummary(text: string) {
+    if (!text.trim()) return;
+    setStage("summarizing");
     try {
-      const res = await fetch("/api/summarize", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ transcript: text }),
-      });
-      const data = await res.json();
-      if (!res.ok) throw new Error(data.error ?? "Failed to summarize");
-      setAiSummary(data.summary ?? "");
-    } catch (err) {
-      setSummaryError(err instanceof Error ? err.message : "Failed to summarize");
+      setAiSummary(await summarizeTranscript(text));
+    } catch {
+      setNotice("Transcript saved, but the AI summary failed. Tap Regenerate to retry.");
     } finally {
-      setSummarizing(false);
+      setStage("idle");
     }
-  }, []);
+  }
 
-  // Stopping the recording is the volunteer's "done" signal, so summarize right then.
-  useEffect(() => {
-    if (speech.listening) {
-      wasListeningRef.current = true;
-      return;
+  async function handleStop() {
+    const blob = await recorder.stop();
+    if (!blob) return;
+
+    setNotice(null);
+    setStage("transcribing");
+    try {
+      const text = await transcribeAudio(blob);
+      setPendingAudio(null);
+      const combined = transcript ? `${transcript} ${text}`.trim() : text;
+      setTranscript(combined);
+      setStage("idle");
+      await runSummary(combined);
+    } catch (err) {
+      // Keep the audio so nothing is lost; the sync loop retries it.
+      setPendingAudio(blob);
+      setStage("idle");
+      setNotice(
+        err instanceof RateLimitedError
+          ? "Transcription is busy right now. The recording is saved and will transcribe automatically — just save this entry."
+          : "No connection. The recording is saved and will transcribe automatically once you're back online."
+      );
     }
-    if (wasListeningRef.current) {
-      wasListeningRef.current = false;
-      generateSummary();
-    }
-  }, [speech.listening, generateSummary]);
+  }
 
   function handleSave() {
-    if (speech.listening) speech.stop();
     onSave({
       id: existingEntry?.id,
       transcript,
       ai_summary: aiSummary || null,
       marks,
       notes,
+      pendingAudio,
     });
   }
 
@@ -97,7 +108,8 @@ export default function FeedbackSheet({
       <header className="flex items-center justify-between gap-3 border-b border-line px-4 py-3.5">
         <button
           onClick={onClose}
-          className="shrink-0 rounded-lg px-2 py-1.5 text-sm font-medium text-dim transition-colors active:bg-surface"
+          disabled={recorder.recording}
+          className="shrink-0 rounded-lg px-2 py-1.5 text-sm font-medium text-dim transition-colors active:bg-surface disabled:opacity-30"
         >
           Close
         </button>
@@ -107,49 +119,58 @@ export default function FeedbackSheet({
         </div>
         <button
           onClick={handleSave}
-          className="shrink-0 rounded-lg bg-accent px-3.5 py-2 text-sm font-semibold text-accent-ink transition-opacity active:opacity-80"
+          disabled={recorder.recording}
+          className="shrink-0 rounded-lg bg-accent px-3.5 py-2 text-sm font-semibold text-accent-ink transition-opacity active:opacity-80 disabled:opacity-30"
         >
           Save
         </button>
       </header>
 
       <div className="flex-1 overflow-y-auto px-5 py-5 pb-[max(2rem,env(safe-area-inset-bottom))]">
-        {!speech.supported && (
-          <p className="mb-5 rounded-lg border border-accent/25 bg-accent/10 px-3.5 py-2.5 text-xs leading-relaxed text-accent-soft">
-            Live transcription isn&apos;t supported in this browser — use Chrome on Android,
-            or type the feedback in directly.
-          </p>
-        )}
-
         <section className="mb-6 rounded-2xl border border-line bg-surface px-5 py-7">
           <div className="flex flex-col items-center">
             <button
-              onClick={speech.listening ? speech.stop : speech.start}
-              disabled={!speech.supported || summarizing}
-              className={`flex h-20 w-20 items-center justify-center rounded-full transition-all disabled:opacity-30 ${
-                speech.listening
+              onClick={recorder.recording ? handleStop : recorder.start}
+              disabled={busy}
+              className={`flex h-20 w-20 items-center justify-center rounded-full transition-all disabled:opacity-40 ${
+                recorder.recording
                   ? "animate-pulse bg-danger/15 ring-4 ring-danger/30"
                   : "bg-accent/15 ring-4 ring-accent/20 active:ring-accent/40"
               }`}
             >
-              {speech.listening ? (
+              {recorder.recording ? (
                 <span className="h-6 w-6 rounded-md bg-danger" />
               ) : (
                 <span className="h-7 w-7 rounded-full bg-accent" />
               )}
             </button>
-            <p className="mt-4 text-center text-xs leading-relaxed text-muted">
-              {speech.listening
-                ? "Listening… pauses are fine. Tap to finish."
-                : summarizing
-                  ? "Finishing up…"
-                  : transcript
-                    ? "Tap to continue recording"
-                    : "Tap to start · speak in Hinglish"}
+
+            {recorder.recording ? (
+              <p className="mt-4 font-mono text-lg tabular-nums text-fg">
+                {formatDuration(recorder.seconds)}
+              </p>
+            ) : null}
+
+            <p className="mt-2 text-center text-xs leading-relaxed text-muted">
+              {recorder.recording
+                ? "Recording — take as long as the learner needs"
+                : stage === "transcribing"
+                  ? "Transcribing…"
+                  : stage === "summarizing"
+                    ? "Writing summary…"
+                    : transcript
+                      ? "Tap to record more"
+                      : "Tap to record · speak in Hinglish"}
             </p>
-            {speech.error && (
+
+            {recorder.error && (
               <p className="mt-3 rounded-lg border border-danger/30 bg-danger/10 px-3 py-2 text-center text-xs text-danger">
-                {speech.error}
+                {recorder.error}
+              </p>
+            )}
+            {notice && (
+              <p className="mt-3 rounded-lg border border-accent/25 bg-accent/10 px-3 py-2 text-center text-xs leading-relaxed text-accent-soft">
+                {notice}
               </p>
             )}
           </div>
@@ -161,15 +182,14 @@ export default function FeedbackSheet({
               Transcript
             </label>
             <textarea
-              value={transcript + (speech.interim ? " " + speech.interim : "")}
-              onChange={(e) => {
-                // Keep the speech engine's copy in step, so resuming a recording
-                // appends to the edited text instead of reverting it.
-                setTranscript(e.target.value);
-                speech.setTranscript(e.target.value);
-              }}
+              value={transcript}
+              onChange={(e) => setTranscript(e.target.value)}
               rows={7}
-              placeholder="Feedback appears here as the learner speaks — you can edit it."
+              placeholder={
+                stage === "transcribing"
+                  ? "Transcribing the recording…"
+                  : "The transcript appears here after you stop recording. You can edit it."
+              }
               className={fieldClass}
             />
           </div>
@@ -180,27 +200,18 @@ export default function FeedbackSheet({
                 AI summary
               </label>
               <button
-                onClick={generateSummary}
-                disabled={!transcript.trim() || summarizing || speech.listening}
+                onClick={() => runSummary(transcript)}
+                disabled={!transcript.trim() || busy || recorder.recording}
                 className="rounded-md border border-line px-2.5 py-1 text-xs font-medium text-dim transition-colors active:bg-surface-2 disabled:opacity-30"
               >
-                {summarizing ? "Summarizing…" : "Regenerate"}
+                {stage === "summarizing" ? "Summarizing…" : "Regenerate"}
               </button>
             </div>
-            {summaryError && (
-              <p className="mb-2 rounded-lg border border-danger/30 bg-danger/10 px-3 py-2 text-xs text-danger">
-                {summaryError}
-              </p>
-            )}
             <textarea
               value={aiSummary}
               onChange={(e) => setAiSummary(e.target.value)}
               rows={4}
-              placeholder={
-                summarizing
-                  ? "Generating summary…"
-                  : "Generated automatically when you stop recording."
-              }
+              placeholder="Written automatically once the recording is transcribed."
               className={fieldClass}
             />
           </div>

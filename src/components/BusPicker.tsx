@@ -5,6 +5,7 @@ import Link from "next/link";
 import { useLiveQuery } from "dexie-react-hooks";
 import { db } from "@/lib/db";
 import { pendingCount, syncDown, syncUp } from "@/lib/sync";
+import { processPendingRecordings } from "@/lib/transcription";
 import { useOnline } from "@/lib/useOnline";
 import type { Bus } from "@/lib/types";
 
@@ -21,6 +22,7 @@ export default function BusPicker() {
   useEffect(() => {
     const run = async () => {
       await syncDown();
+      await processPendingRecordings();
       await syncUp();
       setPending(await pendingCount());
       setLoaded(true);
