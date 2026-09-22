@@ -5,14 +5,13 @@ import Link from "next/link";
 import { useLiveQuery } from "dexie-react-hooks";
 import { db } from "@/lib/db";
 import { pendingCount, syncDown, syncUp } from "@/lib/sync";
+import { useOnline } from "@/lib/useOnline";
 import type { Bus } from "@/lib/types";
 
 const EMPTY_BUSES: Bus[] = [];
 
 export default function BusPicker() {
-  const [online, setOnline] = useState(() =>
-    typeof navigator === "undefined" ? true : navigator.onLine
-  );
+  const online = useOnline();
   const [pending, setPending] = useState(0);
   const [loaded, setLoaded] = useState(false);
 
@@ -27,17 +26,10 @@ export default function BusPicker() {
       setLoaded(true);
     };
     run();
-    const onOnline = () => {
-      setOnline(true);
-      run();
-    };
-    const onOffline = () => setOnline(false);
-    window.addEventListener("online", onOnline);
-    window.addEventListener("offline", onOffline);
+    window.addEventListener("online", run);
     const interval = setInterval(run, 20000);
     return () => {
-      window.removeEventListener("online", onOnline);
-      window.removeEventListener("offline", onOffline);
+      window.removeEventListener("online", run);
       clearInterval(interval);
     };
   }, []);

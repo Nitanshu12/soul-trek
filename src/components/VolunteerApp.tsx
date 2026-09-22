@@ -6,6 +6,7 @@ import { useLiveQuery } from "dexie-react-hooks";
 import { db, newId } from "@/lib/db";
 import { pendingCount, syncDown, syncUp } from "@/lib/sync";
 import { getVolunteerName, setVolunteerName } from "@/lib/auth";
+import { useOnline } from "@/lib/useOnline";
 import type { Session, Student, FeedbackEntry } from "@/lib/types";
 import SessionPicker from "./SessionPicker";
 import StudentList from "./StudentList";
@@ -18,9 +19,7 @@ const EMPTY_ENTRIES: FeedbackEntry[] = [];
 export default function VolunteerApp({ busId }: { busId: string }) {
   const [selectedSessionId, setSelectedSessionId] = useState<string | null>(null);
   const [activeStudentId, setActiveStudentId] = useState<string | null>(null);
-  const [online, setOnline] = useState(() =>
-    typeof navigator === "undefined" ? true : navigator.onLine
-  );
+  const online = useOnline();
   const [pending, setPending] = useState(0);
   const [volunteer, setVolunteer] = useState("");
   const [askingName, setAskingName] = useState(false);
@@ -57,17 +56,10 @@ export default function VolunteerApp({ busId }: { busId: string }) {
       setPending(await pendingCount());
     };
     run();
-    const onOnline = () => {
-      setOnline(true);
-      run();
-    };
-    const onOffline = () => setOnline(false);
-    window.addEventListener("online", onOnline);
-    window.addEventListener("offline", onOffline);
+    window.addEventListener("online", run);
     const interval = setInterval(run, 20000);
     return () => {
-      window.removeEventListener("online", onOnline);
-      window.removeEventListener("offline", onOffline);
+      window.removeEventListener("online", run);
       clearInterval(interval);
     };
   }, []);
