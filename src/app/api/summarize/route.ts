@@ -20,16 +20,17 @@ export async function POST(req: Request) {
       "Content-Type": "application/json",
     },
     body: JSON.stringify({
-      model: "llama-3.3-70b-versatile",
+      model: "openai/gpt-oss-20b",
       temperature: 0.3,
       messages: [
         {
           role: "system",
           content:
             "You summarize spoken feedback from a learner at a 4-day youth program called 'Soul Trek'. " +
-            "Write a concise 2-3 sentence summary in English covering: what they learned/took away, " +
-            "how they felt about the sessions, and any suggestions or concerns they raised. " +
-            "Be neutral and factual, do not invent details that aren't in the transcript.",
+            "The transcript is Hinglish (Hindi and English mixed together) and may be in Devanagari script, " +
+            "Latin script, or both. Write a concise 2-3 sentence summary IN ENGLISH covering: what they " +
+            "learned or took away, how they felt about the sessions, and any suggestions or complaints " +
+            "they raised. Be neutral and factual, and do not invent details that aren't in the transcript.",
         },
         { role: "user", content: transcript },
       ],

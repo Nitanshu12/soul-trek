@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import type { FeedbackEntry, Session, Student } from "@/lib/types";
 import { useSpeechRecognition } from "@/lib/useSpeechRecognition";
 
@@ -25,8 +25,7 @@ export default function FeedbackSheet({
     notes: string;
   }) => void;
 }) {
-  const [lang, setLang] = useState<"en-IN" | "hi-IN">("en-IN");
-  const speech = useSpeechRecognition(lang);
+  const speech = useSpeechRecognition(existingEntry?.transcript ?? "");
   const [transcript, setTranscript] = useState(existingEntry?.transcript ?? "");
   const [aiSummary, setAiSummary] = useState(existingEntry?.ai_summary ?? "");
   const [summarizing, setSummarizing] = useState(false);
@@ -34,20 +33,28 @@ export default function FeedbackSheet({
   const [marks, setMarks] = useState<number | null>(existingEntry?.marks ?? null);
   const [notes, setNotes] = useState(existingEntry?.notes ?? "");
 
+  const transcriptRef = useRef(transcript);
+  const wasListeningRef = useRef(false);
+
   useEffect(() => {
     // eslint-disable-next-line react-hooks/set-state-in-effect -- mirrors the speech engine's running transcript
     if (speech.transcript) setTranscript(speech.transcript);
   }, [speech.transcript]);
 
-  async function generateSummary() {
-    if (!transcript.trim()) return;
+  useEffect(() => {
+    transcriptRef.current = transcript;
+  }, [transcript]);
+
+  const generateSummary = useCallback(async () => {
+    const text = transcriptRef.current.trim();
+    if (!text) return;
     setSummarizing(true);
     setSummaryError(null);
     try {
       const res = await fetch("/api/summarize", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ transcript }),
+        body: JSON.stringify({ transcript: text }),
       });
       const data = await res.json();
       if (!res.ok) throw new Error(data.error ?? "Failed to summarize");
@@ -57,7 +64,19 @@ export default function FeedbackSheet({
     } finally {
       setSummarizing(false);
     }
-  }
+  }, []);
+
+  // Stopping the recording is the volunteer's "done" signal, so summarize right then.
+  useEffect(() => {
+    if (speech.listening) {
+      wasListeningRef.current = true;
+      return;
+    }
+    if (wasListeningRef.current) {
+      wasListeningRef.current = false;
+      generateSummary();
+    }
+  }, [speech.listening, generateSummary]);
 
   function handleSave() {
     if (speech.listening) speech.stop();
@@ -102,28 +121,14 @@ export default function FeedbackSheet({
           </p>
         )}
 
-        <section className="mb-6 rounded-2xl border border-line bg-surface px-5 py-6">
-          <div className="mb-5 flex items-center justify-center gap-1.5">
-            {(["en-IN", "hi-IN"] as const).map((l) => (
-              <button
-                key={l}
-                onClick={() => setLang(l)}
-                className={`rounded-lg px-3 py-1.5 text-xs font-medium transition-colors ${
-                  lang === l ? "bg-surface-2 text-fg" : "text-muted"
-                }`}
-              >
-                {l === "en-IN" ? "English" : "हिन्दी"}
-              </button>
-            ))}
-          </div>
-
+        <section className="mb-6 rounded-2xl border border-line bg-surface px-5 py-7">
           <div className="flex flex-col items-center">
             <button
               onClick={speech.listening ? speech.stop : speech.start}
-              disabled={!speech.supported}
+              disabled={!speech.supported || summarizing}
               className={`flex h-20 w-20 items-center justify-center rounded-full transition-all disabled:opacity-30 ${
                 speech.listening
-                  ? "bg-danger/15 ring-4 ring-danger/30"
+                  ? "animate-pulse bg-danger/15 ring-4 ring-danger/30"
                   : "bg-accent/15 ring-4 ring-accent/20 active:ring-accent/40"
               }`}
             >
@@ -133,9 +138,20 @@ export default function FeedbackSheet({
                 <span className="h-7 w-7 rounded-full bg-accent" />
               )}
             </button>
-            <p className="mt-4 text-xs text-muted">
-              {speech.listening ? "Listening… tap to stop" : "Tap to start recording"}
+            <p className="mt-4 text-center text-xs leading-relaxed text-muted">
+              {speech.listening
+                ? "Listening… pauses are fine. Tap to finish."
+                : summarizing
+                  ? "Finishing up…"
+                  : transcript
+                    ? "Tap to continue recording"
+                    : "Tap to start · speak in Hinglish"}
             </p>
+            {speech.error && (
+              <p className="mt-3 rounded-lg border border-danger/30 bg-danger/10 px-3 py-2 text-center text-xs text-danger">
+                {speech.error}
+              </p>
+            )}
           </div>
         </section>
 
@@ -146,34 +162,45 @@ export default function FeedbackSheet({
             </label>
             <textarea
               value={transcript + (speech.interim ? " " + speech.interim : "")}
-              onChange={(e) => setTranscript(e.target.value)}
+              onChange={(e) => {
+                // Keep the speech engine's copy in step, so resuming a recording
+                // appends to the edited text instead of reverting it.
+                setTranscript(e.target.value);
+                speech.setTranscript(e.target.value);
+              }}
               rows={7}
               placeholder="Feedback appears here as the learner speaks — you can edit it."
               className={fieldClass}
             />
-            <button
-              onClick={generateSummary}
-              disabled={!transcript.trim() || summarizing}
-              className="mt-2.5 w-full rounded-xl border border-accent/30 bg-accent/10 py-3 text-sm font-medium text-accent-soft transition-opacity active:opacity-80 disabled:opacity-30"
-            >
-              {summarizing ? "Summarizing…" : "Generate AI summary"}
-            </button>
-            {summaryError && (
-              <p className="mt-2 rounded-lg border border-danger/30 bg-danger/10 px-3 py-2 text-xs text-danger">
-                {summaryError}
-              </p>
-            )}
           </div>
 
           <div>
-            <label className="mb-2 block text-xs font-medium uppercase tracking-wider text-muted">
-              AI summary
-            </label>
+            <div className="mb-2 flex items-center justify-between gap-3">
+              <label className="text-xs font-medium uppercase tracking-wider text-muted">
+                AI summary
+              </label>
+              <button
+                onClick={generateSummary}
+                disabled={!transcript.trim() || summarizing || speech.listening}
+                className="rounded-md border border-line px-2.5 py-1 text-xs font-medium text-dim transition-colors active:bg-surface-2 disabled:opacity-30"
+              >
+                {summarizing ? "Summarizing…" : "Regenerate"}
+              </button>
+            </div>
+            {summaryError && (
+              <p className="mb-2 rounded-lg border border-danger/30 bg-danger/10 px-3 py-2 text-xs text-danger">
+                {summaryError}
+              </p>
+            )}
             <textarea
               value={aiSummary}
               onChange={(e) => setAiSummary(e.target.value)}
               rows={4}
-              placeholder="Generate above, or write your own."
+              placeholder={
+                summarizing
+                  ? "Generating summary…"
+                  : "Generated automatically when you stop recording."
+              }
               className={fieldClass}
             />
           </div>

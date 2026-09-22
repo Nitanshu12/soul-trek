@@ -11,15 +11,20 @@ interface SpeechRecognitionEventLike extends Event {
   };
 }
 
+interface SpeechRecognitionErrorEventLike extends Event {
+  error: string;
+}
+
 interface SpeechRecognitionLike extends EventTarget {
   lang: string;
   continuous: boolean;
   interimResults: boolean;
   onresult: ((event: SpeechRecognitionEventLike) => void) | null;
-  onerror: ((event: Event) => void) | null;
+  onerror: ((event: SpeechRecognitionErrorEventLike) => void) | null;
   onend: (() => void) | null;
   start: () => void;
   stop: () => void;
+  abort: () => void;
 }
 
 interface Window {
