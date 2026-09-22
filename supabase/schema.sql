@@ -1,5 +1,10 @@
 -- Soul Trek Feedback — database schema
 -- Run this once in the Supabase SQL editor for your project.
+--
+-- Access model: volunteers do NOT sign in. They open the app, pick their bus, and
+-- record feedback. So the anon (public) key can read buses and read/write sessions,
+-- students and feedback entries. Only the admin dashboard is behind a login, and
+-- only an admin can create or change buses.
 
 create extension if not exists "pgcrypto";
 
@@ -38,13 +43,12 @@ create table if not exists feedback_entries (
   created_at timestamptz not null default now()
 );
 
--- One row per auth user: role + which bus they're allowed to work on.
+-- Admin accounts only.
 create table if not exists profiles (
   id uuid primary key references auth.users(id) on delete cascade,
   username text unique,
   display_name text,
-  role text not null check (role in ('admin', 'volunteer')),
-  bus_id uuid references buses(id) on delete set null,
+  role text not null check (role in ('admin')),
   created_at timestamptz not null default now()
 );
 
@@ -53,7 +57,7 @@ create index if not exists feedback_entries_bus_id_idx on feedback_entries(bus_i
 create index if not exists feedback_entries_session_id_idx on feedback_entries(session_id);
 create index if not exists feedback_entries_student_id_idx on feedback_entries(student_id);
 
--- ---------- Helper functions (security definer avoids recursive RLS on profiles) ----------
+-- ---------- Helper function (security definer avoids recursive RLS on profiles) ----------
 
 create or replace function public.is_admin()
 returns boolean
@@ -67,16 +71,6 @@ as $$
   );
 $$;
 
-create or replace function public.my_bus_id()
-returns uuid
-language sql
-security definer
-set search_path = public
-stable
-as $$
-  select bus_id from profiles where id = auth.uid();
-$$;
-
 -- ---------- Row Level Security ----------
 
 alter table buses enable row level security;
@@ -85,53 +79,46 @@ alter table students enable row level security;
 alter table feedback_entries enable row level security;
 alter table profiles enable row level security;
 
--- buses: any signed-in user can see the list of buses (just names); only admins manage them.
-create policy "buses_select_authenticated" on buses
-  for select using (auth.uid() is not null);
-create policy "buses_write_admin" on buses
+-- buses: everyone can read the list (volunteers pick from it); only admins manage them.
+create policy "buses_select_public" on buses
+  for select using (true);
+create policy "buses_insert_admin" on buses
   for insert with check (is_admin());
 create policy "buses_update_admin" on buses
   for update using (is_admin());
 create policy "buses_delete_admin" on buses
   for delete using (is_admin());
 
--- sessions: shared across the whole event; any signed-in volunteer can add one when they
--- actually run a feedback round (it's not mandatory to have one for every day).
-create policy "sessions_select_authenticated" on sessions
-  for select using (auth.uid() is not null);
-create policy "sessions_insert_authenticated" on sessions
-  for insert with check (auth.uid() is not null);
+-- sessions: shared across the event, created by whoever runs a feedback round.
+create policy "sessions_select_public" on sessions
+  for select using (true);
+create policy "sessions_insert_public" on sessions
+  for insert with check (true);
 
--- students: volunteers only see/manage learners on their own assigned bus. Admins see all.
-create policy "students_select_own_bus" on students
-  for select using (is_admin() or bus_id = my_bus_id());
-create policy "students_insert_own_bus" on students
-  for insert with check (is_admin() or bus_id = my_bus_id());
-create policy "students_update_own_bus" on students
-  for update using (is_admin() or bus_id = my_bus_id());
+-- students: volunteers add learners to their bus as they go.
+create policy "students_select_public" on students
+  for select using (true);
+create policy "students_insert_public" on students
+  for insert with check (true);
+create policy "students_update_public" on students
+  for update using (true);
 
--- feedback_entries: same scoping as students.
-create policy "entries_select_own_bus" on feedback_entries
-  for select using (is_admin() or bus_id = my_bus_id());
-create policy "entries_insert_own_bus" on feedback_entries
-  for insert with check (is_admin() or bus_id = my_bus_id());
-create policy "entries_update_own_bus" on feedback_entries
-  for update using (is_admin() or bus_id = my_bus_id());
+-- feedback_entries: the actual recordings, written from the volunteer's phone.
+create policy "entries_select_public" on feedback_entries
+  for select using (true);
+create policy "entries_insert_public" on feedback_entries
+  for insert with check (true);
+create policy "entries_update_public" on feedback_entries
+  for update using (true);
 
--- profiles: a user can see their own profile; admins can see/manage everyone's.
-create policy "profiles_select_self_or_admin" on profiles
-  for select using (id = auth.uid() or is_admin());
-create policy "profiles_insert_admin" on profiles
-  for insert with check (is_admin());
-create policy "profiles_update_admin" on profiles
-  for update using (is_admin());
-create policy "profiles_delete_admin" on profiles
-  for delete using (is_admin());
+-- profiles: an admin can see their own row; nothing is writable from the client.
+create policy "profiles_select_self" on profiles
+  for select using (id = auth.uid());
 
 -- ---------- Bootstrap: make yourself an admin ----------
--- 1. In the Supabase dashboard: Authentication -> Users -> Add user.
---    Use your real email (e.g. aks@greengenome.in) and a password. Confirm the email.
--- 2. Copy that user's UID, then run (replacing the values):
+-- 1. Supabase dashboard -> Authentication -> Users -> Add user.
+--    Use your real email and a password, and tick "Auto Confirm User".
+-- 2. Copy that user's UID, then run (replacing the UID):
 --
--- insert into profiles (id, username, display_name, role)
--- values ('<paste-user-uid-here>', 'admin', 'Admin', 'admin');
+-- insert into profiles (id, display_name, role)
+-- values ('<paste-user-uid-here>', 'Admin', 'admin');

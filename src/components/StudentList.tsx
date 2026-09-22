@@ -20,52 +20,61 @@ export default function StudentList({
   const [name, setName] = useState("");
 
   const doneStudentIds = new Set(entries.map((e) => e.student_id));
+  const doneCount = students.filter((s) => doneStudentIds.has(s.id)).length;
 
   return (
-    <div className="flex-1 overflow-y-auto px-3 pb-24 pt-3">
-      {!sessionSelected && students.length > 0 && (
-        <p className="mb-3 rounded-lg bg-yellow-50 px-3 py-2 text-center text-xs text-yellow-800">
-          Pick or create a session above before recording feedback.
-        </p>
-      )}
+    <>
+      <div className="flex-1 overflow-y-auto px-5 pb-32 pt-4">
+        {!sessionSelected && students.length > 0 && (
+          <p className="mb-4 rounded-lg border border-accent/25 bg-accent/10 px-3.5 py-2.5 text-xs text-accent-soft">
+            Pick or create a session above before recording feedback.
+          </p>
+        )}
 
-      {students.length === 0 && (
-        <p className="mt-8 text-center text-sm text-neutral-400">
-          No learners added for this bus yet.
-        </p>
-      )}
+        {students.length > 0 && sessionSelected && (
+          <p className="mb-3 px-1 text-xs font-medium uppercase tracking-wider text-muted">
+            {doneCount} of {students.length} recorded
+          </p>
+        )}
 
-      <ul className="space-y-2">
-        {students.map((student) => {
-          const done = doneStudentIds.has(student.id);
-          return (
-            <li key={student.id}>
-              <button
-                onClick={() => onOpenFeedback(student.id)}
-                className="flex w-full items-center justify-between rounded-xl border border-neutral-200 bg-white px-4 py-3 text-left shadow-sm active:bg-neutral-50"
-              >
-                <span className="font-medium text-neutral-900">{student.name}</span>
-                {sessionSelected && (
-                  <span
-                    className={`ml-2 shrink-0 rounded-full px-2 py-0.5 text-xs font-medium ${
-                      done
-                        ? "bg-green-100 text-green-700"
-                        : "bg-neutral-100 text-neutral-400"
-                    }`}
+        {students.length === 0 ? (
+          <p className="py-16 text-center text-sm text-muted">
+            No learners on this bus yet.
+          </p>
+        ) : (
+          <ul className="space-y-2">
+            {students.map((student) => {
+              const done = doneStudentIds.has(student.id);
+              return (
+                <li key={student.id}>
+                  <button
+                    onClick={() => onOpenFeedback(student.id)}
+                    className="flex w-full items-center justify-between gap-3 rounded-xl border border-line bg-surface px-4 py-4 text-left transition-colors active:bg-surface-2"
                   >
-                    {done ? "Recorded" : "Pending"}
-                  </span>
-                )}
-              </button>
-            </li>
-          );
-        })}
-      </ul>
+                    <span className="min-w-0 truncate text-sm font-medium">
+                      {student.name}
+                    </span>
+                    {sessionSelected && (
+                      <span
+                        className={`shrink-0 rounded-md px-2 py-1 text-xs font-medium ${
+                          done ? "bg-ok/15 text-ok" : "bg-surface-2 text-muted"
+                        }`}
+                      >
+                        {done ? "Recorded" : "Pending"}
+                      </span>
+                    )}
+                  </button>
+                </li>
+              );
+            })}
+          </ul>
+        )}
+      </div>
 
-      <div className="fixed inset-x-0 bottom-0 border-t border-neutral-200 bg-white p-3">
+      <div className="border-t border-line bg-bg px-5 py-4 pb-[max(1rem,env(safe-area-inset-bottom))]">
         {adding ? (
           <form
-            className="flex items-center gap-2"
+            className="flex gap-2.5"
             onSubmit={(e) => {
               e.preventDefault();
               const trimmed = name.trim();
@@ -78,12 +87,13 @@ export default function StudentList({
               autoFocus
               value={name}
               onChange={(e) => setName(e.target.value)}
+              onBlur={() => !name.trim() && setAdding(false)}
               placeholder="Learner's name"
-              className="flex-1 rounded-xl border border-neutral-300 px-4 py-3 text-base outline-none"
+              className="min-w-0 flex-1 rounded-xl border border-line bg-surface-2 px-4 py-3 text-base text-fg focus:border-accent"
             />
             <button
               type="submit"
-              className="shrink-0 rounded-xl bg-orange-600 px-4 py-3 font-medium text-white"
+              className="shrink-0 rounded-xl bg-accent px-5 py-3 text-sm font-semibold text-accent-ink transition-opacity active:opacity-80"
             >
               Add
             </button>
@@ -91,12 +101,12 @@ export default function StudentList({
         ) : (
           <button
             onClick={() => setAdding(true)}
-            className="w-full rounded-xl bg-orange-600 py-3 text-base font-semibold text-white"
+            className="w-full rounded-xl bg-accent py-3.5 text-base font-semibold text-accent-ink transition-opacity active:opacity-80"
           >
             + Add learner
           </button>
         )}
       </div>
-    </div>
+    </>
   );
 }

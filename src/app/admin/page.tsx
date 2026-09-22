@@ -18,5 +18,5 @@ export default async function AdminPage() {
 
   if (profile?.role !== "admin") redirect("/");
 
-  return <AdminDashboard adminName={profile.display_name || profile.username || "Admin"} />;
+  return <AdminDashboard adminName={profile.display_name || user.email || "Admin"} />;
 }

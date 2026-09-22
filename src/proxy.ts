@@ -1,6 +1,7 @@
 import { createServerClient } from "@supabase/ssr";
 import { NextResponse, type NextRequest } from "next/server";
 
+// Only /admin is gated. Volunteers use the app without signing in.
 export async function proxy(request: NextRequest) {
   let response = NextResponse.next({ request });
 
@@ -28,18 +29,10 @@ export async function proxy(request: NextRequest) {
   } = await supabase.auth.getUser();
 
   const path = request.nextUrl.pathname;
-  const isLoginPage = path === "/login";
 
-  if (!user && !isLoginPage) {
-    const redirectUrl = new URL("/login", request.url);
-    return NextResponse.redirect(redirectUrl);
-  }
+  if (path.startsWith("/admin")) {
+    if (!user) return NextResponse.redirect(new URL("/login", request.url));
 
-  if (user && isLoginPage) {
-    return NextResponse.redirect(new URL("/", request.url));
-  }
-
-  if (user && path.startsWith("/admin")) {
     const { data: profile } = await supabase
       .from("profiles")
       .select("role")
@@ -50,11 +43,13 @@ export async function proxy(request: NextRequest) {
     }
   }
 
+  if (user && path === "/login") {
+    return NextResponse.redirect(new URL("/admin", request.url));
+  }
+
   return response;
 }
 
 export const config = {
-  matcher: [
-    "/((?!_next/static|_next/image|favicon.ico|manifest.json|icon-192.png|icon-512.png|api/).*)",
-  ],
+  matcher: ["/admin/:path*", "/login"],
 };

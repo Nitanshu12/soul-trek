@@ -18,7 +18,7 @@ export const metadata: Metadata = {
   manifest: "/manifest.json",
   appleWebApp: {
     capable: true,
-    statusBarStyle: "default",
+    statusBarStyle: "black-translucent",
     title: "Soul Trek",
   },
 };
@@ -28,7 +28,7 @@ export const viewport: Viewport = {
   initialScale: 1,
   maximumScale: 1,
   viewportFit: "cover",
-  themeColor: "#ea580c",
+  themeColor: "#0a0a0b",
 };
 
 export default function RootLayout({ children }: LayoutProps<"/">) {
@@ -37,9 +37,7 @@ export default function RootLayout({ children }: LayoutProps<"/">) {
       lang="en"
       className={`${geistSans.variable} ${geistMono.variable} h-full antialiased`}
     >
-      <body className="min-h-full flex flex-col bg-neutral-50 text-neutral-900">
-        {children}
-      </body>
+      <body className="min-h-full flex flex-col bg-bg text-fg">{children}</body>
     </html>
   );
 }

@@ -1,49 +1,54 @@
 "use client";
 
 import { useEffect, useMemo, useState } from "react";
+import Link from "next/link";
 import { useLiveQuery } from "dexie-react-hooks";
-import { useRouter } from "next/navigation";
 import { db, newId } from "@/lib/db";
 import { pendingCount, syncDown, syncUp } from "@/lib/sync";
-import { createClient } from "@/lib/supabase/client";
-import type { Bus } from "@/lib/types";
+import { getVolunteerName, setVolunteerName } from "@/lib/auth";
+import type { Session, Student, FeedbackEntry } from "@/lib/types";
 import SessionPicker from "./SessionPicker";
 import StudentList from "./StudentList";
 import FeedbackSheet from "./FeedbackSheet";
-import type { Session, Student, FeedbackEntry } from "@/lib/types";
 
 const EMPTY_SESSIONS: Session[] = [];
 const EMPTY_STUDENTS: Student[] = [];
 const EMPTY_ENTRIES: FeedbackEntry[] = [];
 
-export default function VolunteerApp({
-  bus,
-  volunteerName,
-}: {
-  bus: Bus;
-  volunteerName: string;
-}) {
-  const router = useRouter();
+export default function VolunteerApp({ busId }: { busId: string }) {
   const [selectedSessionId, setSelectedSessionId] = useState<string | null>(null);
   const [activeStudentId, setActiveStudentId] = useState<string | null>(null);
   const [online, setOnline] = useState(() =>
     typeof navigator === "undefined" ? true : navigator.onLine
   );
   const [pending, setPending] = useState(0);
+  const [volunteer, setVolunteer] = useState("");
+  const [askingName, setAskingName] = useState(false);
+  const [nameDraft, setNameDraft] = useState("");
 
+  const bus = useLiveQuery(() => db.buses.get(busId), [busId]);
   const sessions = useLiveQuery(() => db.sessions.toArray(), []) ?? EMPTY_SESSIONS;
   const students =
     useLiveQuery(
-      () => db.students.where("bus_id").equals(bus.id).sortBy("created_at"),
-      [bus.id]
+      () => db.students.where("bus_id").equals(busId).sortBy("created_at"),
+      [busId]
     ) ?? EMPTY_STUDENTS;
   const entries =
-    useLiveQuery(() => db.entries.where("bus_id").equals(bus.id).toArray(), [bus.id]) ??
+    useLiveQuery(() => db.entries.where("bus_id").equals(busId).toArray(), [busId]) ??
     EMPTY_ENTRIES;
 
-  // Default to the most recently created session until the volunteer picks a different one.
+  // Default to the most recently created session until the volunteer picks another.
   const effectiveSessionId =
     selectedSessionId ?? (sessions.length ? sessions[sessions.length - 1].id : null);
+
+  useEffect(() => {
+    // Read after hydration, not as lazy state: localStorage is empty on the server
+    // and would render a different first pass than the client.
+    const saved = getVolunteerName();
+    // eslint-disable-next-line react-hooks/set-state-in-effect
+    if (saved) setVolunteer(saved);
+    else setAskingName(true);
+  }, []);
 
   useEffect(() => {
     const run = async () => {
@@ -81,15 +86,17 @@ export default function VolunteerApp({
         ) ?? null
       : null;
 
+  const flushSync = () => syncUp().then(async () => setPending(await pendingCount()));
+
   async function addStudent(name: string) {
     await db.students.add({
       id: newId(),
-      bus_id: bus.id,
+      bus_id: busId,
       name,
       created_at: new Date().toISOString(),
       synced: 0,
     });
-    syncUp().then(async () => setPending(await pendingCount()));
+    flushSync();
   }
 
   async function addSession(label: string, date: string) {
@@ -102,7 +109,7 @@ export default function VolunteerApp({
       synced: 0,
     });
     setSelectedSessionId(id);
-    syncUp().then(async () => setPending(await pendingCount()));
+    flushSync();
   }
 
   async function saveFeedback(payload: {
@@ -116,9 +123,9 @@ export default function VolunteerApp({
     await db.entries.put({
       id: payload.id ?? newId(),
       student_id: activeStudent.id,
-      bus_id: bus.id,
+      bus_id: busId,
       session_id: activeSession.id,
-      volunteer_name: volunteerName,
+      volunteer_name: volunteer,
       transcript: payload.transcript,
       ai_summary: payload.ai_summary,
       marks: payload.marks,
@@ -127,36 +134,72 @@ export default function VolunteerApp({
       synced: 0,
     });
     setActiveStudentId(null);
-    syncUp().then(async () => setPending(await pendingCount()));
+    flushSync();
   }
 
-  async function signOut() {
-    const supabase = createClient();
-    await supabase?.auth.signOut();
-    router.replace("/login");
-    router.refresh();
+  if (askingName) {
+    return (
+      <div className="flex min-h-dvh flex-col justify-center px-5 py-12">
+        <div className="mx-auto w-full max-w-sm">
+          <h1 className="text-xl font-semibold tracking-tight">Who&apos;s taking feedback?</h1>
+          <p className="mt-1.5 text-sm leading-relaxed text-dim">
+            Your name is saved on this phone and tagged on the feedback you record.
+          </p>
+          <form
+            className="mt-6 space-y-3"
+            onSubmit={(e) => {
+              e.preventDefault();
+              const trimmed = nameDraft.trim();
+              if (!trimmed) return;
+              setVolunteerName(trimmed);
+              setVolunteer(trimmed);
+              setAskingName(false);
+            }}
+          >
+            <input
+              autoFocus
+              value={nameDraft}
+              onChange={(e) => setNameDraft(e.target.value)}
+              placeholder="Your name"
+              className="w-full rounded-xl border border-line bg-surface px-4 py-3 text-base text-fg focus:border-accent"
+            />
+            <button
+              type="submit"
+              disabled={!nameDraft.trim()}
+              className="w-full rounded-xl bg-accent py-3.5 text-base font-semibold text-accent-ink transition-opacity active:opacity-80 disabled:opacity-30"
+            >
+              Continue
+            </button>
+          </form>
+        </div>
+      </div>
+    );
   }
 
   return (
     <div className="flex h-dvh flex-col">
-      <header className="flex items-center justify-between border-b border-neutral-200 bg-white px-4 py-3">
-        <div>
-          <p className="font-bold text-neutral-900">{bus.name}</p>
-          <p className="text-xs text-neutral-500">{volunteerName}</p>
-        </div>
-        <div className="flex items-center gap-2">
-          <span
-            className={`h-2 w-2 rounded-full ${online ? "bg-green-500" : "bg-red-500"}`}
-            title={online ? "Online" : "Offline"}
-          />
-          {pending > 0 && (
-            <span className="rounded-full bg-yellow-100 px-2 py-0.5 text-xs font-medium text-yellow-800">
-              {pending} pending
-            </span>
-          )}
-          <button onClick={signOut} className="text-xs font-medium text-neutral-400">
-            Sign out
-          </button>
+      <header className="flex items-center justify-between gap-3 border-b border-line px-5 py-4">
+        <div className="flex min-w-0 items-center gap-3">
+          <Link
+            href="/"
+            className="shrink-0 rounded-lg border border-line px-2.5 py-1.5 text-sm text-dim transition-colors active:bg-surface"
+          >
+            ‹
+          </Link>
+          <div className="min-w-0">
+            <p className="truncate text-base font-semibold tracking-tight">
+              {bus?.name ?? "Bus"}
+            </p>
+            <div className="mt-0.5 flex items-center gap-1.5">
+              <span
+                className={`h-1.5 w-1.5 shrink-0 rounded-full ${online ? "bg-ok" : "bg-danger"}`}
+              />
+              <p className="truncate text-xs text-muted">
+                {volunteer}
+                {pending > 0 && ` · ${pending} to sync`}
+              </p>
+            </div>
+          </div>
         </div>
       </header>
 
@@ -182,7 +225,7 @@ export default function VolunteerApp({
         <FeedbackSheet
           student={activeStudent}
           session={activeSession}
-          volunteerName={volunteerName}
+          volunteerName={volunteer}
           existingEntry={existingEntry}
           onClose={() => setActiveStudentId(null)}
           onSave={saveFeedback}

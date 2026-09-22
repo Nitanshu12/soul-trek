@@ -1,13 +1,13 @@
 "use client";
 
 import { useState } from "react";
+import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { createClient } from "@/lib/supabase/client";
-import { usernameToEmail } from "@/lib/auth";
 
 export default function LoginPage() {
   const router = useRouter();
-  const [identifier, setIdentifier] = useState("");
+  const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   const [error, setError] = useState<string | null>(null);
   const [loading, setLoading] = useState(false);
@@ -24,60 +24,80 @@ export default function LoginPage() {
       return;
     }
 
-    const email = usernameToEmail(identifier);
     const { error: signInError } = await supabase.auth.signInWithPassword({
-      email,
+      email: email.trim().toLowerCase(),
       password,
     });
 
     setLoading(false);
     if (signInError) {
-      setError("Incorrect username/email or password.");
+      setError("Incorrect email or password.");
       return;
     }
 
-    router.replace("/");
+    router.replace("/admin");
     router.refresh();
   }
 
   return (
-    <div className="flex min-h-screen flex-col items-center justify-center bg-orange-600 px-6 text-white">
-      <h1 className="mb-1 text-2xl font-bold">Soul Trek Feedback</h1>
-      <p className="mb-8 text-orange-100">Sign in to continue</p>
+    <div className="flex min-h-dvh flex-col justify-center px-5 py-12">
+      <div className="mx-auto w-full max-w-sm">
+        <div className="mb-10 text-center">
+          <div className="mx-auto mb-5 flex h-14 w-14 items-center justify-center rounded-2xl bg-accent/15 ring-1 ring-accent/30">
+            <span className="h-5 w-5 rounded-full border-2 border-accent" />
+          </div>
+          <h1 className="text-2xl font-semibold tracking-tight">Admin sign in</h1>
+          <p className="mt-1.5 text-sm text-dim">Soul Trek · Haridwar</p>
+        </div>
 
-      <form onSubmit={handleSubmit} className="w-full max-w-xs space-y-3">
-        <input
-          autoFocus
-          value={identifier}
-          onChange={(e) => setIdentifier(e.target.value)}
-          placeholder="Username (or admin email)"
-          autoCapitalize="none"
-          className="w-full rounded-xl border-0 bg-white px-4 py-3 text-lg text-neutral-900 shadow-sm outline-none"
-        />
-        <input
-          type="password"
-          value={password}
-          onChange={(e) => setPassword(e.target.value)}
-          placeholder="Password"
-          className="w-full rounded-xl border-0 bg-white px-4 py-3 text-lg text-neutral-900 shadow-sm outline-none"
-        />
+        <form onSubmit={handleSubmit} className="space-y-3">
+          <div>
+            <label className="mb-1.5 block text-xs font-medium text-dim">Email</label>
+            <input
+              autoFocus
+              type="email"
+              value={email}
+              onChange={(e) => setEmail(e.target.value)}
+              placeholder="you@example.com"
+              autoCapitalize="none"
+              autoCorrect="off"
+              className="w-full rounded-xl border border-line bg-surface px-4 py-3 text-base text-fg transition-colors focus:border-accent"
+            />
+          </div>
 
-        {error && (
-          <p className="rounded-lg bg-red-500/20 px-3 py-2 text-sm text-red-50">{error}</p>
-        )}
+          <div>
+            <label className="mb-1.5 block text-xs font-medium text-dim">Password</label>
+            <input
+              type="password"
+              value={password}
+              onChange={(e) => setPassword(e.target.value)}
+              placeholder="••••••••"
+              className="w-full rounded-xl border border-line bg-surface px-4 py-3 text-base text-fg transition-colors focus:border-accent"
+            />
+          </div>
 
-        <button
-          type="submit"
-          disabled={loading || !identifier.trim() || !password}
-          className="w-full rounded-xl bg-neutral-900 px-4 py-3 text-lg font-semibold text-white disabled:opacity-40"
-        >
-          {loading ? "Signing in..." : "Sign in"}
-        </button>
-      </form>
+          {error && (
+            <p className="rounded-lg border border-danger/30 bg-danger/10 px-3 py-2.5 text-sm text-danger">
+              {error}
+            </p>
+          )}
 
-      <p className="mt-8 max-w-xs text-center text-sm text-orange-100">
-        Don&apos;t have a login? Ask your Soul Trek admin to create one for you.
-      </p>
+          <button
+            type="submit"
+            disabled={loading || !email.trim() || !password}
+            className="w-full rounded-xl bg-accent px-4 py-3.5 text-base font-semibold text-accent-ink transition-opacity active:opacity-80 disabled:opacity-30"
+          >
+            {loading ? "Signing in…" : "Sign in"}
+          </button>
+        </form>
+
+        <p className="mt-8 text-center text-xs leading-relaxed text-muted">
+          Volunteers don&apos;t need to sign in —{" "}
+          <Link href="/" className="underline underline-offset-4">
+            go to the bus list
+          </Link>
+        </p>
+      </div>
     </div>
   );
 }

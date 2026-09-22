@@ -1,6 +1,6 @@
 import { db } from "./db";
 import { supabase, supabaseConfigured } from "./supabase/client";
-import type { Session, Student, FeedbackEntry } from "./types";
+import type { Bus, Session, Student, FeedbackEntry } from "./types";
 
 let syncing = false;
 
@@ -73,8 +73,10 @@ async function pullTable<T extends { id: string; synced: 0 | 1 }>(
 export async function syncDown(): Promise<void> {
   if (!supabaseConfigured || !supabase) return;
   if (typeof navigator !== "undefined" && !navigator.onLine) return;
-  // RLS on the server scopes what comes back: a volunteer only ever receives their
-  // own bus's students/entries, so no client-side filtering is needed here.
+
+  const { data: remoteBuses } = await supabase.from("buses").select("*");
+  if (remoteBuses) await db.buses.bulkPut(remoteBuses as Bus[]);
+
   await pullTable<Session>("sessions", "sessions");
   await pullTable<Student>("students", "students");
   await pullTable<FeedbackEntry>("entries", "feedback_entries");

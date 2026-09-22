@@ -5,14 +5,6 @@ import { useRouter } from "next/navigation";
 import { createClient } from "@/lib/supabase/client";
 import type { Bus } from "@/lib/types";
 
-interface VolunteerProfile {
-  id: string;
-  username: string | null;
-  display_name: string | null;
-  bus_id: string | null;
-  created_at: string;
-}
-
 interface Session {
   id: string;
   label: string;
@@ -35,7 +27,10 @@ interface FeedbackRow {
   sessions: { label: string; date: string } | null;
 }
 
-type Tab = "feedback" | "buses" | "volunteers";
+type Tab = "feedback" | "buses";
+
+const inputClass =
+  "w-full rounded-lg border border-line bg-surface-2 px-3.5 py-2.5 text-sm text-fg transition-colors focus:border-accent";
 
 export default function AdminDashboard({ adminName }: { adminName: string }) {
   const router = useRouter();
@@ -43,7 +38,6 @@ export default function AdminDashboard({ adminName }: { adminName: string }) {
   const [tab, setTab] = useState<Tab>("feedback");
 
   const [buses, setBuses] = useState<Bus[]>([]);
-  const [volunteers, setVolunteers] = useState<VolunteerProfile[]>([]);
   const [sessions, setSessions] = useState<Session[]>([]);
   const [entries, setEntries] = useState<FeedbackRow[]>([]);
   const [loading, setLoading] = useState(true);
@@ -51,23 +45,15 @@ export default function AdminDashboard({ adminName }: { adminName: string }) {
   async function refetchAll() {
     if (!supabase) return;
     setLoading(true);
-    const [busesRes, volunteersRes, sessionsRes, entriesRes] = await Promise.all([
+    const [busesRes, sessionsRes, entriesRes] = await Promise.all([
       supabase.from("buses").select("*").order("name"),
-      supabase
-        .from("profiles")
-        .select("id, username, display_name, bus_id, created_at")
-        .eq("role", "volunteer")
-        .order("created_at"),
       supabase.from("sessions").select("id, label, date").order("date"),
       supabase
         .from("feedback_entries")
-        .select(
-          "*, students(name), buses(name), sessions(label, date)"
-        )
+        .select("*, students(name), buses(name), sessions(label, date)")
         .order("created_at", { ascending: false }),
     ]);
     setBuses(busesRes.data ?? []);
-    setVolunteers(volunteersRes.data ?? []);
     setSessions(sessionsRes.data ?? []);
     setEntries((entriesRes.data as unknown as FeedbackRow[]) ?? []);
     setLoading(false);
@@ -86,54 +72,73 @@ export default function AdminDashboard({ adminName }: { adminName: string }) {
   }
 
   return (
-    <div className="min-h-dvh bg-neutral-50 pb-10">
-      <header className="flex items-center justify-between border-b border-neutral-200 bg-white px-4 py-3">
-        <div>
-          <p className="font-bold text-neutral-900">Soul Trek Admin</p>
-          <p className="text-xs text-neutral-500">{adminName}</p>
+    <div className="min-h-dvh">
+      <header className="sticky top-0 z-10 border-b border-line bg-bg/90 backdrop-blur">
+        <div className="mx-auto flex max-w-2xl items-center justify-between px-5 py-4">
+          <div>
+            <p className="text-base font-semibold tracking-tight">Soul Trek Admin</p>
+            <p className="mt-0.5 text-xs text-muted">{adminName}</p>
+          </div>
+          <button
+            onClick={signOut}
+            className="rounded-lg border border-line px-3 py-1.5 text-xs font-medium text-dim transition-colors active:bg-surface"
+          >
+            Sign out
+          </button>
         </div>
-        <button onClick={signOut} className="text-xs font-medium text-neutral-400">
-          Sign out
-        </button>
+
+        <nav className="mx-auto flex max-w-2xl gap-1.5 overflow-x-auto px-5 pb-3">
+          {(
+            [
+              ["feedback", "Feedback"],
+              ["buses", "Buses"],
+            ] as [Tab, string][]
+          ).map(([key, label]) => (
+            <button
+              key={key}
+              onClick={() => setTab(key)}
+              className={`shrink-0 rounded-lg px-3.5 py-2 text-sm font-medium transition-colors ${
+                tab === key
+                  ? "bg-accent text-accent-ink"
+                  : "bg-surface text-dim active:bg-surface-2"
+              }`}
+            >
+              {label}
+            </button>
+          ))}
+        </nav>
       </header>
 
-      <nav className="flex gap-2 overflow-x-auto border-b border-neutral-200 bg-white px-3 py-2">
-        {(
-          [
-            ["feedback", "Feedback"],
-            ["buses", "Buses"],
-            ["volunteers", "Volunteers"],
-          ] as [Tab, string][]
-        ).map(([key, label]) => (
-          <button
-            key={key}
-            onClick={() => setTab(key)}
-            className={`shrink-0 rounded-full px-4 py-1.5 text-sm font-medium ${
-              tab === key ? "bg-orange-600 text-white" : "bg-neutral-100 text-neutral-700"
-            }`}
-          >
-            {label}
-          </button>
-        ))}
-      </nav>
-
-      <main className="px-3 py-4">
+      <main className="mx-auto max-w-2xl px-5 py-6 pb-16">
         {loading ? (
-          <p className="text-center text-sm text-neutral-400">Loading...</p>
+          <p className="py-12 text-center text-sm text-muted">Loading…</p>
         ) : tab === "buses" ? (
           <BusesTab buses={buses} onChange={refetchAll} supabase={supabase} />
-        ) : tab === "volunteers" ? (
-          <VolunteersTab
-            buses={buses}
-            volunteers={volunteers}
-            onChange={refetchAll}
-          />
         ) : (
           <FeedbackTab buses={buses} sessions={sessions} entries={entries} />
         )}
       </main>
     </div>
   );
+}
+
+function SectionCard({
+  title,
+  children,
+}: {
+  title: string;
+  children: React.ReactNode;
+}) {
+  return (
+    <section className="rounded-2xl border border-line bg-surface p-5">
+      <h2 className="mb-4 text-sm font-semibold text-fg">{title}</h2>
+      {children}
+    </section>
+  );
+}
+
+function EmptyNote({ children }: { children: React.ReactNode }) {
+  return <p className="py-10 text-center text-sm text-muted">{children}</p>;
 }
 
 function BusesTab({
@@ -160,190 +165,44 @@ function BusesTab({
   }
 
   return (
-    <div>
-      <form onSubmit={addBus} className="mb-4 flex gap-2">
-        <input
-          value={name}
-          onChange={(e) => setName(e.target.value)}
-          placeholder="New bus name (e.g. Bus 9)"
-          className="flex-1 rounded-xl border border-neutral-300 bg-white px-3 py-2 text-sm outline-none"
-        />
-        <button
-          type="submit"
-          disabled={saving || !name.trim()}
-          className="shrink-0 rounded-xl bg-orange-600 px-4 py-2 text-sm font-semibold text-white disabled:opacity-40"
-        >
-          Add bus
-        </button>
-      </form>
-
-      <ul className="space-y-2">
-        {buses.map((bus) => (
-          <li
-            key={bus.id}
-            className="rounded-xl border border-neutral-200 bg-white px-4 py-3 text-sm font-medium text-neutral-900"
+    <div className="space-y-5">
+      <SectionCard title="Add a bus">
+        <form onSubmit={addBus} className="flex gap-2">
+          <input
+            value={name}
+            onChange={(e) => setName(e.target.value)}
+            placeholder="Bus name, e.g. Bus 9"
+            className={inputClass}
+          />
+          <button
+            type="submit"
+            disabled={saving || !name.trim()}
+            className="shrink-0 rounded-lg bg-accent px-4 py-2.5 text-sm font-semibold text-accent-ink transition-opacity active:opacity-80 disabled:opacity-30"
           >
-            {bus.name}
-          </li>
-        ))}
-        {!buses.length && (
-          <p className="text-center text-sm text-neutral-400">No buses yet.</p>
+            Add
+          </button>
+        </form>
+      </SectionCard>
+
+      <div>
+        <p className="mb-2.5 px-1 text-xs font-medium uppercase tracking-wider text-muted">
+          {buses.length} {buses.length === 1 ? "bus" : "buses"}
+        </p>
+        {buses.length ? (
+          <ul className="space-y-2">
+            {buses.map((bus) => (
+              <li
+                key={bus.id}
+                className="rounded-xl border border-line bg-surface px-4 py-3.5 text-sm font-medium"
+              >
+                {bus.name}
+              </li>
+            ))}
+          </ul>
+        ) : (
+          <EmptyNote>No buses yet — add your first one above.</EmptyNote>
         )}
-      </ul>
-    </div>
-  );
-}
-
-function VolunteersTab({
-  buses,
-  volunteers,
-  onChange,
-}: {
-  buses: Bus[];
-  volunteers: VolunteerProfile[];
-  onChange: () => void;
-}) {
-  const [username, setUsername] = useState("");
-  const [displayName, setDisplayName] = useState("");
-  const [password, setPassword] = useState("");
-  const [busId, setBusId] = useState("");
-  const [error, setError] = useState<string | null>(null);
-  const [saving, setSaving] = useState(false);
-
-  const busName = (id: string | null) => buses.find((b) => b.id === id)?.name ?? "—";
-
-  async function addVolunteer(e: React.FormEvent) {
-    e.preventDefault();
-    setError(null);
-    if (!username.trim() || !password || !busId) {
-      setError("Username, password and bus are required.");
-      return;
-    }
-    setSaving(true);
-    const res = await fetch("/api/admin/create-volunteer", {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ username, password, displayName, busId }),
-    });
-    const data = await res.json();
-    setSaving(false);
-    if (!res.ok) {
-      setError(data.error ?? "Failed to create volunteer");
-      return;
-    }
-    setUsername("");
-    setDisplayName("");
-    setPassword("");
-    setBusId("");
-    onChange();
-  }
-
-  async function resetPassword(volunteerId: string) {
-    const newPassword = prompt("New password for this volunteer (min 6 characters):");
-    if (!newPassword) return;
-    const res = await fetch("/api/admin/reset-password", {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ volunteerId, newPassword }),
-    });
-    const data = await res.json();
-    if (!res.ok) alert(data.error ?? "Failed to reset password");
-    else alert("Password updated.");
-  }
-
-  async function removeVolunteer(volunteerId: string, label: string) {
-    if (!confirm(`Remove login for "${label}"? This can't be undone.`)) return;
-    const res = await fetch("/api/admin/delete-volunteer", {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ volunteerId }),
-    });
-    const data = await res.json();
-    if (!res.ok) alert(data.error ?? "Failed to remove volunteer");
-    else onChange();
-  }
-
-  return (
-    <div>
-      <form onSubmit={addVolunteer} className="mb-4 space-y-2 rounded-xl border border-neutral-200 bg-white p-3">
-        <p className="text-sm font-semibold text-neutral-900">Add volunteer login</p>
-        <input
-          value={username}
-          onChange={(e) => setUsername(e.target.value)}
-          placeholder="Username (e.g. rahul.bus1)"
-          autoCapitalize="none"
-          className="w-full rounded-lg border border-neutral-300 px-3 py-2 text-sm outline-none"
-        />
-        <input
-          value={displayName}
-          onChange={(e) => setDisplayName(e.target.value)}
-          placeholder="Display name (optional, e.g. Rahul)"
-          className="w-full rounded-lg border border-neutral-300 px-3 py-2 text-sm outline-none"
-        />
-        <input
-          value={password}
-          onChange={(e) => setPassword(e.target.value)}
-          placeholder="Password (min 6 characters)"
-          className="w-full rounded-lg border border-neutral-300 px-3 py-2 text-sm outline-none"
-        />
-        <select
-          value={busId}
-          onChange={(e) => setBusId(e.target.value)}
-          className="w-full rounded-lg border border-neutral-300 px-3 py-2 text-sm outline-none"
-        >
-          <option value="">Assign to bus...</option>
-          {buses.map((bus) => (
-            <option key={bus.id} value={bus.id}>
-              {bus.name}
-            </option>
-          ))}
-        </select>
-        {error && <p className="text-xs text-red-600">{error}</p>}
-        <button
-          type="submit"
-          disabled={saving}
-          className="w-full rounded-lg bg-orange-600 py-2 text-sm font-semibold text-white disabled:opacity-40"
-        >
-          {saving ? "Creating..." : "Create login"}
-        </button>
-      </form>
-
-      <ul className="space-y-2">
-        {volunteers.map((v) => (
-          <li
-            key={v.id}
-            className="rounded-xl border border-neutral-200 bg-white px-4 py-3 text-sm"
-          >
-            <div className="flex items-center justify-between">
-              <div>
-                <p className="font-medium text-neutral-900">
-                  {v.display_name || v.username}
-                </p>
-                <p className="text-xs text-neutral-500">
-                  @{v.username} · {busName(v.bus_id)}
-                </p>
-              </div>
-              <div className="flex shrink-0 gap-3">
-                <button
-                  onClick={() => resetPassword(v.id)}
-                  className="text-xs font-medium text-orange-600"
-                >
-                  Reset password
-                </button>
-                <button
-                  onClick={() => removeVolunteer(v.id, v.display_name || v.username || "")}
-                  className="text-xs font-medium text-red-600"
-                >
-                  Remove
-                </button>
-              </div>
-            </div>
-          </li>
-        ))}
-        {!volunteers.length && (
-          <p className="text-center text-sm text-neutral-400">No volunteers yet.</p>
-        )}
-      </ul>
+      </div>
     </div>
   );
 }
@@ -393,9 +252,7 @@ function FeedbackTab({
       e.transcript ?? "",
     ]);
     const csv = [header, ...rows]
-      .map((row) =>
-        row.map((cell) => `"${String(cell).replace(/"/g, '""')}"`).join(",")
-      )
+      .map((row) => row.map((cell) => `"${String(cell).replace(/"/g, '""')}"`).join(","))
       .join("\n");
     const blob = new Blob([csv], { type: "text/csv;charset=utf-8;" });
     const url = URL.createObjectURL(blob);
@@ -407,19 +264,19 @@ function FeedbackTab({
   }
 
   return (
-    <div>
-      <div className="mb-3 flex flex-col gap-2">
+    <div className="space-y-5">
+      <div className="space-y-2.5 rounded-2xl border border-line bg-surface p-4">
         <input
           value={search}
           onChange={(e) => setSearch(e.target.value)}
-          placeholder="Search learner name..."
-          className="rounded-lg border border-neutral-300 bg-white px-3 py-2 text-sm outline-none"
+          placeholder="Search learner name…"
+          className={inputClass}
         />
-        <div className="flex gap-2">
+        <div className="flex gap-2.5">
           <select
             value={busFilter}
             onChange={(e) => setBusFilter(e.target.value)}
-            className="flex-1 rounded-lg border border-neutral-300 bg-white px-2 py-2 text-sm outline-none"
+            className={inputClass}
           >
             <option value="">All buses</option>
             {buses.map((b) => (
@@ -431,7 +288,7 @@ function FeedbackTab({
           <select
             value={sessionFilter}
             onChange={(e) => setSessionFilter(e.target.value)}
-            className="flex-1 rounded-lg border border-neutral-300 bg-white px-2 py-2 text-sm outline-none"
+            className={inputClass}
           >
             <option value="">All sessions</option>
             {sessions.map((s) => (
@@ -444,63 +301,76 @@ function FeedbackTab({
         <button
           onClick={exportCsv}
           disabled={!filtered.length}
-          className="rounded-lg border border-orange-300 bg-orange-50 py-2 text-sm font-medium text-orange-700 disabled:opacity-40"
+          className="w-full rounded-lg border border-line py-2.5 text-sm font-medium text-dim transition-colors active:bg-surface-2 disabled:opacity-30"
         >
-          Export {filtered.length} rows to CSV
+          Export {filtered.length} {filtered.length === 1 ? "row" : "rows"} to CSV
         </button>
       </div>
 
-      <ul className="space-y-2">
-        {filtered.map((e) => {
-          const isOpen = expanded === e.id;
-          return (
-            <li key={e.id} className="rounded-xl border border-neutral-200 bg-white p-3">
-              <button
-                onClick={() => setExpanded(isOpen ? null : e.id)}
-                className="flex w-full items-center justify-between text-left"
-              >
-                <div>
-                  <p className="font-medium text-neutral-900">{e.students?.name ?? "Unknown"}</p>
-                  <p className="text-xs text-neutral-500">
-                    {e.buses?.name} · {e.sessions?.label} · by {e.volunteer_name}
+      {filtered.length ? (
+        <ul className="space-y-2.5">
+          {filtered.map((e) => {
+            const isOpen = expanded === e.id;
+            return (
+              <li key={e.id} className="rounded-xl border border-line bg-surface p-4">
+                <button
+                  onClick={() => setExpanded(isOpen ? null : e.id)}
+                  className="flex w-full items-start justify-between gap-3 text-left"
+                >
+                  <div className="min-w-0">
+                    <p className="truncate text-sm font-medium">
+                      {e.students?.name ?? "Unknown learner"}
+                    </p>
+                    <p className="mt-0.5 truncate text-xs text-muted">
+                      {e.buses?.name} · {e.sessions?.label} · {e.volunteer_name}
+                    </p>
+                  </div>
+                  {e.marks != null && (
+                    <span className="shrink-0 rounded-md bg-surface-2 px-2 py-1 text-xs font-semibold text-accent-soft">
+                      {e.marks}/10
+                    </span>
+                  )}
+                </button>
+
+                {e.ai_summary && (
+                  <p className="mt-3 rounded-lg border border-line bg-surface-2 px-3.5 py-3 text-sm leading-relaxed text-dim">
+                    {e.ai_summary}
                   </p>
-                </div>
-                {e.marks != null && (
-                  <span className="shrink-0 rounded-full bg-neutral-900 px-2 py-0.5 text-xs font-medium text-white">
-                    {e.marks}/10
-                  </span>
                 )}
-              </button>
 
-              {e.ai_summary && (
-                <p className="mt-2 rounded-lg bg-orange-50 px-3 py-2 text-sm text-neutral-700">
-                  {e.ai_summary}
-                </p>
-              )}
-
-              {isOpen && (
-                <div className="mt-2 space-y-2 border-t border-neutral-100 pt-2">
-                  {e.notes && (
-                    <p className="text-sm text-neutral-700">
-                      <span className="font-medium">Volunteer notes: </span>
-                      {e.notes}
-                    </p>
-                  )}
-                  {e.transcript && (
-                    <p className="whitespace-pre-wrap text-sm text-neutral-500">
-                      <span className="font-medium text-neutral-700">Transcript: </span>
-                      {e.transcript}
-                    </p>
-                  )}
-                </div>
-              )}
-            </li>
-          );
-        })}
-        {!filtered.length && (
-          <p className="text-center text-sm text-neutral-400">No feedback entries match.</p>
-        )}
-      </ul>
+                {isOpen && (
+                  <div className="mt-3 space-y-3 border-t border-line pt-3">
+                    {e.notes && (
+                      <div>
+                        <p className="mb-1 text-xs font-medium uppercase tracking-wider text-muted">
+                          Volunteer notes
+                        </p>
+                        <p className="text-sm leading-relaxed text-dim">{e.notes}</p>
+                      </div>
+                    )}
+                    {e.transcript && (
+                      <div>
+                        <p className="mb-1 text-xs font-medium uppercase tracking-wider text-muted">
+                          Transcript
+                        </p>
+                        <p className="whitespace-pre-wrap text-sm leading-relaxed text-muted">
+                          {e.transcript}
+                        </p>
+                      </div>
+                    )}
+                  </div>
+                )}
+              </li>
+            );
+          })}
+        </ul>
+      ) : (
+        <EmptyNote>
+          {entries.length
+            ? "No entries match these filters."
+            : "No feedback recorded yet."}
+        </EmptyNote>
+      )}
     </div>
   );
 }

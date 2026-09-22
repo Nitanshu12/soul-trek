@@ -26,22 +26,22 @@ export default function SessionPicker({
   const sorted = [...sessions].sort((a, b) => a.date.localeCompare(b.date));
 
   return (
-    <div className="border-b border-neutral-200 bg-orange-50/60 px-3 py-2">
+    <div className="border-b border-line bg-surface/40 px-5 py-3">
       <div className="flex items-center gap-2 overflow-x-auto">
-        <span className="shrink-0 text-xs font-medium uppercase tracking-wide text-neutral-500">
-          Session
-        </span>
         {sorted.map((s) => {
           const active = s.id === selectedSessionId;
           return (
             <button
               key={s.id}
               onClick={() => onSelect(s.id)}
-              className={`shrink-0 whitespace-nowrap rounded-full px-3 py-1.5 text-sm font-medium ${
-                active ? "bg-neutral-900 text-white" : "bg-white text-neutral-700 border border-neutral-200"
+              className={`shrink-0 whitespace-nowrap rounded-lg border px-3 py-1.5 text-sm font-medium transition-colors ${
+                active
+                  ? "border-accent/40 bg-accent/15 text-accent-soft"
+                  : "border-line bg-surface text-dim"
               }`}
             >
-              {s.label} <span className="opacity-60">· {formatDate(s.date)}</span>
+              {s.label}
+              <span className="ml-1.5 text-xs opacity-60">{formatDate(s.date)}</span>
             </button>
           );
         })}
@@ -52,16 +52,16 @@ export default function SessionPicker({
               setLabel(`Day ${sessions.length + 1}`);
               setAdding(true);
             }}
-            className="shrink-0 whitespace-nowrap rounded-full border border-dashed border-orange-400 px-3 py-1.5 text-sm text-orange-700"
+            className="shrink-0 whitespace-nowrap rounded-lg border border-dashed border-line px-3 py-1.5 text-sm text-muted transition-colors active:bg-surface"
           >
-            + New session
+            + Session
           </button>
         )}
       </div>
 
       {adding && (
         <form
-          className="mt-2 flex items-center gap-2"
+          className="mt-3 space-y-2.5"
           onSubmit={(e) => {
             e.preventDefault();
             const trimmed = label.trim();
@@ -69,38 +69,43 @@ export default function SessionPicker({
             setAdding(false);
           }}
         >
-          <input
-            autoFocus
-            value={label}
-            onChange={(e) => setLabel(e.target.value)}
-            placeholder="e.g. Day 2"
-            className="flex-1 rounded-lg border border-neutral-300 px-3 py-2 text-sm outline-none"
-          />
-          <input
-            type="date"
-            value={date}
-            onChange={(e) => setDate(e.target.value)}
-            className="rounded-lg border border-neutral-300 px-2 py-2 text-sm outline-none"
-          />
-          <button
-            type="submit"
-            className="shrink-0 rounded-lg bg-orange-600 px-3 py-2 text-sm font-medium text-white"
-          >
-            Add
-          </button>
-          <button
-            type="button"
-            onClick={() => setAdding(false)}
-            className="shrink-0 text-sm text-neutral-500"
-          >
-            Cancel
-          </button>
+          <div className="flex gap-2.5">
+            <input
+              autoFocus
+              value={label}
+              onChange={(e) => setLabel(e.target.value)}
+              placeholder="e.g. Day 2"
+              className="min-w-0 flex-1 rounded-lg border border-line bg-surface-2 px-3.5 py-2.5 text-sm text-fg focus:border-accent"
+            />
+            <input
+              type="date"
+              value={date}
+              onChange={(e) => setDate(e.target.value)}
+              className="shrink-0 rounded-lg border border-line bg-surface-2 px-3 py-2.5 text-sm text-fg focus:border-accent"
+            />
+          </div>
+          <div className="flex gap-2.5">
+            <button
+              type="button"
+              onClick={() => setAdding(false)}
+              className="flex-1 rounded-lg border border-line py-2.5 text-sm font-medium text-dim transition-colors active:bg-surface-2"
+            >
+              Cancel
+            </button>
+            <button
+              type="submit"
+              className="flex-1 rounded-lg bg-accent py-2.5 text-sm font-semibold text-accent-ink transition-opacity active:opacity-80"
+            >
+              Add session
+            </button>
+          </div>
         </form>
       )}
 
       {!sessions.length && !adding && (
-        <p className="mt-1 text-xs text-neutral-500">
-          No sessions yet — tap “+ New session” whenever you actually sit down to take feedback (it doesn&apos;t have to be every day).
+        <p className="mt-2.5 text-xs leading-relaxed text-muted">
+          Create a session whenever you actually sit down to take feedback — it doesn&apos;t
+          have to be every day.
         </p>
       )}
     </div>
