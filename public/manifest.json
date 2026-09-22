@@ -1,0 +1,14 @@
+{
+  "name": "Soul Trek Feedback",
+  "short_name": "Soul Trek",
+  "description": "Bus-wise learner feedback collection for Soul Trek, Haridwar",
+  "start_url": "/",
+  "display": "standalone",
+  "background_color": "#fafafa",
+  "theme_color": "#ea580c",
+  "orientation": "portrait",
+  "icons": [
+    { "src": "/icon-192.png", "sizes": "192x192", "type": "image/png" },
+    { "src": "/icon-512.png", "sizes": "512x512", "type": "image/png" }
+  ]
+}
