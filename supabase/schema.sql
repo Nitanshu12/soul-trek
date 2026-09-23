@@ -39,7 +39,20 @@ create table if not exists feedback_entries (
   transcript text,
   ai_summary text,
   marks integer check (marks between 1 and 10),
+  satisfaction text check (satisfaction in ('satisfactory', 'unsatisfactory')),
   notes text,
+  created_at timestamptz not null default now()
+);
+
+create table if not exists complaints (
+  id uuid primary key default gen_random_uuid(),
+  bus_id uuid not null references buses(id) on delete cascade,
+  student_id uuid references students(id) on delete set null,
+  name text not null,
+  photo_url text,
+  notes text,
+  volunteer_name text,
+  status text not null default 'open' check (status in ('open', 'resolved')),
   created_at timestamptz not null default now()
 );
 
@@ -56,6 +69,8 @@ create index if not exists students_bus_id_idx on students(bus_id);
 create index if not exists feedback_entries_bus_id_idx on feedback_entries(bus_id);
 create index if not exists feedback_entries_session_id_idx on feedback_entries(session_id);
 create index if not exists feedback_entries_student_id_idx on feedback_entries(student_id);
+create index if not exists complaints_bus_id_idx on complaints(bus_id);
+create index if not exists complaints_student_id_idx on complaints(student_id);
 
 -- ---------- Helper function (security definer avoids recursive RLS on profiles) ----------
 
@@ -77,6 +92,7 @@ alter table buses enable row level security;
 alter table sessions enable row level security;
 alter table students enable row level security;
 alter table feedback_entries enable row level security;
+alter table complaints enable row level security;
 alter table profiles enable row level security;
 
 -- buses: everyone can read the list (volunteers pick from it); only admins manage them.
@@ -111,9 +127,28 @@ create policy "entries_insert_public" on feedback_entries
 create policy "entries_update_public" on feedback_entries
   for update using (true);
 
+-- complaints: filed against a bus, optionally linked to a matched student.
+create policy "complaints_select_public" on complaints
+  for select using (true);
+create policy "complaints_insert_public" on complaints
+  for insert with check (true);
+create policy "complaints_update_public" on complaints
+  for update using (true);
+
 -- profiles: an admin can see their own row; nothing is writable from the client.
 create policy "profiles_select_self" on profiles
   for select using (id = auth.uid());
+
+-- ---------- Storage bucket for ID-card photos ----------
+
+insert into storage.buckets (id, name, public)
+values ('id-cards', 'id-cards', true)
+on conflict (id) do nothing;
+
+create policy "id_cards_read_public" on storage.objects
+  for select using (bucket_id = 'id-cards');
+create policy "id_cards_insert_public" on storage.objects
+  for insert with check (bucket_id = 'id-cards');
 
 -- ---------- Bootstrap: make yourself an admin ----------
 -- 1. Supabase dashboard -> Authentication -> Users -> Add user.

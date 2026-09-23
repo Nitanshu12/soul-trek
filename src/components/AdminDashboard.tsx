@@ -3,7 +3,7 @@
 import { useEffect, useMemo, useState } from "react";
 import { useRouter } from "next/navigation";
 import { createClient } from "@/lib/supabase/client";
-import type { Bus } from "@/lib/types";
+import type { Bus, Satisfaction } from "@/lib/types";
 
 interface Session {
   id: string;
@@ -20,6 +20,7 @@ interface FeedbackRow {
   transcript: string;
   ai_summary: string | null;
   marks: number | null;
+  satisfaction: Satisfaction | null;
   notes: string;
   created_at: string;
   students: { name: string } | null;
@@ -27,10 +28,37 @@ interface FeedbackRow {
   sessions: { label: string; date: string } | null;
 }
 
-type Tab = "feedback" | "buses";
+interface ComplaintRow {
+  id: string;
+  bus_id: string;
+  student_id: string | null;
+  name: string;
+  photo_url: string | null;
+  notes: string;
+  volunteer_name: string;
+  status: "open" | "resolved";
+  created_at: string;
+  buses: { name: string } | null;
+}
+
+type Tab = "feedback" | "complaints" | "buses";
 
 const inputClass =
   "w-full rounded-lg border border-line bg-surface-2 px-3.5 py-2.5 text-sm text-fg transition-colors focus:border-accent";
+
+function SatisfactionBadge({ value }: { value: Satisfaction | null }) {
+  if (!value) return null;
+  const ok = value === "satisfactory";
+  return (
+    <span
+      className={`shrink-0 rounded-md px-2 py-1 text-xs font-medium ${
+        ok ? "bg-ok/15 text-ok" : "bg-danger/15 text-danger"
+      }`}
+    >
+      {ok ? "Satisfactory" : "Unsatisfactory"}
+    </span>
+  );
+}
 
 export default function AdminDashboard({ adminName }: { adminName: string }) {
   const router = useRouter();
@@ -40,22 +68,32 @@ export default function AdminDashboard({ adminName }: { adminName: string }) {
   const [buses, setBuses] = useState<Bus[]>([]);
   const [sessions, setSessions] = useState<Session[]>([]);
   const [entries, setEntries] = useState<FeedbackRow[]>([]);
+  const [complaints, setComplaints] = useState<ComplaintRow[]>([]);
   const [loading, setLoading] = useState(true);
+  const [profileStudent, setProfileStudent] = useState<{
+    id: string;
+    name: string;
+  } | null>(null);
 
   async function refetchAll() {
     if (!supabase) return;
     setLoading(true);
-    const [busesRes, sessionsRes, entriesRes] = await Promise.all([
+    const [busesRes, sessionsRes, entriesRes, complaintsRes] = await Promise.all([
       supabase.from("buses").select("*").order("name"),
       supabase.from("sessions").select("id, label, date").order("date"),
       supabase
         .from("feedback_entries")
         .select("*, students(name), buses(name), sessions(label, date)")
         .order("created_at", { ascending: false }),
+      supabase
+        .from("complaints")
+        .select("*, buses(name)")
+        .order("created_at", { ascending: false }),
     ]);
     setBuses(busesRes.data ?? []);
     setSessions(sessionsRes.data ?? []);
     setEntries((entriesRes.data as unknown as FeedbackRow[]) ?? []);
+    setComplaints((complaintsRes.data as unknown as ComplaintRow[]) ?? []);
     setLoading(false);
   }
 
@@ -70,6 +108,8 @@ export default function AdminDashboard({ adminName }: { adminName: string }) {
     router.replace("/login");
     router.refresh();
   }
+
+  const openComplaintCount = complaints.filter((c) => c.status === "open").length;
 
   return (
     <div className="min-h-dvh">
@@ -91,6 +131,7 @@ export default function AdminDashboard({ adminName }: { adminName: string }) {
           {(
             [
               ["feedback", "Feedback"],
+              ["complaints", `Complaints${openComplaintCount ? ` (${openComplaintCount})` : ""}`],
               ["buses", "Buses"],
             ] as [Tab, string][]
           ).map(([key, label]) => (
@@ -114,21 +155,37 @@ export default function AdminDashboard({ adminName }: { adminName: string }) {
           <p className="py-12 text-center text-sm text-muted">Loading…</p>
         ) : tab === "buses" ? (
           <BusesTab buses={buses} onChange={refetchAll} supabase={supabase} />
+        ) : tab === "complaints" ? (
+          <ComplaintsTab
+            buses={buses}
+            complaints={complaints}
+            supabase={supabase}
+            onChange={refetchAll}
+            onViewProfile={(id, name) => setProfileStudent({ id, name })}
+          />
         ) : (
-          <FeedbackTab buses={buses} sessions={sessions} entries={entries} />
+          <FeedbackTab
+            buses={buses}
+            sessions={sessions}
+            entries={entries}
+            onViewProfile={(id, name) => setProfileStudent({ id, name })}
+          />
         )}
       </main>
+
+      {profileStudent && (
+        <StudentProfile
+          studentName={profileStudent.name}
+          entries={entries.filter((e) => e.student_id === profileStudent.id)}
+          complaints={complaints.filter((c) => c.student_id === profileStudent.id)}
+          onClose={() => setProfileStudent(null)}
+        />
+      )}
     </div>
   );
 }
 
-function SectionCard({
-  title,
-  children,
-}: {
-  title: string;
-  children: React.ReactNode;
-}) {
+function SectionCard({ title, children }: { title: string; children: React.ReactNode }) {
   return (
     <section className="rounded-2xl border border-line bg-surface p-5">
       <h2 className="mb-4 text-sm font-semibold text-fg">{title}</h2>
@@ -211,10 +268,12 @@ function FeedbackTab({
   buses,
   sessions,
   entries,
+  onViewProfile,
 }: {
   buses: Bus[];
   sessions: Session[];
   entries: FeedbackRow[];
+  onViewProfile: (studentId: string, name: string) => void;
 }) {
   const [busFilter, setBusFilter] = useState("");
   const [sessionFilter, setSessionFilter] = useState("");
@@ -236,6 +295,7 @@ function FeedbackTab({
       "Date",
       "Volunteer",
       "Marks",
+      "Satisfaction",
       "AI Summary",
       "Notes",
       "Transcript",
@@ -247,6 +307,7 @@ function FeedbackTab({
       e.sessions?.date ?? "",
       e.volunteer_name ?? "",
       e.marks?.toString() ?? "",
+      e.satisfaction ?? "",
       e.ai_summary ?? "",
       e.notes ?? "",
       e.transcript ?? "",
@@ -313,30 +374,40 @@ function FeedbackTab({
             const isOpen = expanded === e.id;
             return (
               <li key={e.id} className="rounded-xl border border-line bg-surface p-4">
-                <button
-                  onClick={() => setExpanded(isOpen ? null : e.id)}
-                  className="flex w-full items-start justify-between gap-3 text-left"
-                >
-                  <div className="min-w-0">
-                    <p className="truncate text-sm font-medium">
+                <div className="flex items-start justify-between gap-3">
+                  <button
+                    onClick={() =>
+                      onViewProfile(e.student_id, e.students?.name ?? "Unknown learner")
+                    }
+                    className="min-w-0 text-left"
+                  >
+                    <p className="truncate text-sm font-medium underline decoration-line decoration-dotted underline-offset-4">
                       {e.students?.name ?? "Unknown learner"}
                     </p>
                     <p className="mt-0.5 truncate text-xs text-muted">
                       {e.buses?.name} · {e.sessions?.label} · {e.volunteer_name}
                     </p>
+                  </button>
+                  <div className="flex shrink-0 items-center gap-1.5">
+                    <SatisfactionBadge value={e.satisfaction} />
+                    {e.marks != null && (
+                      <span className="rounded-md bg-surface-2 px-2 py-1 text-xs font-semibold text-accent-soft">
+                        {e.marks}/10
+                      </span>
+                    )}
                   </div>
-                  {e.marks != null && (
-                    <span className="shrink-0 rounded-md bg-surface-2 px-2 py-1 text-xs font-semibold text-accent-soft">
-                      {e.marks}/10
-                    </span>
+                </div>
+
+                <button
+                  onClick={() => setExpanded(isOpen ? null : e.id)}
+                  className="mt-3 block w-full text-left"
+                >
+                  {e.ai_summary && (
+                    <p className="rounded-lg border border-line bg-surface-2 px-3.5 py-3 text-sm leading-relaxed text-dim">
+                      {e.ai_summary}
+                    </p>
                   )}
                 </button>
-
-                {e.ai_summary && (
-                  <p className="mt-3 rounded-lg border border-line bg-surface-2 px-3.5 py-3 text-sm leading-relaxed text-dim">
-                    {e.ai_summary}
-                  </p>
-                )}
 
                 {isOpen && (
                   <div className="mt-3 space-y-3 border-t border-line pt-3">
@@ -366,11 +437,254 @@ function FeedbackTab({
         </ul>
       ) : (
         <EmptyNote>
-          {entries.length
-            ? "No entries match these filters."
-            : "No feedback recorded yet."}
+          {entries.length ? "No entries match these filters." : "No feedback recorded yet."}
         </EmptyNote>
       )}
+    </div>
+  );
+}
+
+function ComplaintsTab({
+  buses,
+  complaints,
+  supabase,
+  onChange,
+  onViewProfile,
+}: {
+  buses: Bus[];
+  complaints: ComplaintRow[];
+  supabase: ReturnType<typeof createClient>;
+  onChange: () => void;
+  onViewProfile: (studentId: string, name: string) => void;
+}) {
+  const [busFilter, setBusFilter] = useState("");
+  const [statusFilter, setStatusFilter] = useState<"" | "open" | "resolved">("");
+  const [lightbox, setLightbox] = useState<string | null>(null);
+
+  const filtered = complaints.filter((c) => {
+    if (busFilter && c.bus_id !== busFilter) return false;
+    if (statusFilter && c.status !== statusFilter) return false;
+    return true;
+  });
+
+  async function toggleStatus(complaint: ComplaintRow) {
+    if (!supabase) return;
+    const next = complaint.status === "open" ? "resolved" : "open";
+    await supabase.from("complaints").update({ status: next }).eq("id", complaint.id);
+    onChange();
+  }
+
+  return (
+    <div className="space-y-5">
+      <div className="flex gap-2.5">
+        <select
+          value={busFilter}
+          onChange={(e) => setBusFilter(e.target.value)}
+          className={inputClass}
+        >
+          <option value="">All buses</option>
+          {buses.map((b) => (
+            <option key={b.id} value={b.id}>
+              {b.name}
+            </option>
+          ))}
+        </select>
+        <select
+          value={statusFilter}
+          onChange={(e) => setStatusFilter(e.target.value as "" | "open" | "resolved")}
+          className={inputClass}
+        >
+          <option value="">All statuses</option>
+          <option value="open">Open</option>
+          <option value="resolved">Resolved</option>
+        </select>
+      </div>
+
+      {filtered.length ? (
+        <ul className="space-y-2.5">
+          {filtered.map((c) => (
+            <li key={c.id} className="rounded-xl border border-line bg-surface p-4">
+              <div className="flex gap-3">
+                {c.photo_url ? (
+                  <button
+                    onClick={() => setLightbox(c.photo_url)}
+                    className="h-16 w-16 shrink-0 overflow-hidden rounded-lg border border-line"
+                  >
+                    {/* eslint-disable-next-line @next/next/no-img-element */}
+                    <img
+                      src={c.photo_url}
+                      alt={`${c.name}'s ID card`}
+                      className="h-full w-full object-cover"
+                    />
+                  </button>
+                ) : (
+                  <div className="h-16 w-16 shrink-0 rounded-lg bg-surface-2" />
+                )}
+                <div className="min-w-0 flex-1">
+                  <div className="flex items-start justify-between gap-2">
+                    <button
+                      onClick={() => onViewProfile(c.student_id ?? "", c.name)}
+                      disabled={!c.student_id}
+                      className="min-w-0 text-left disabled:cursor-default"
+                    >
+                      <p
+                        className={`truncate text-sm font-medium ${
+                          c.student_id ? "underline decoration-line decoration-dotted underline-offset-4" : ""
+                        }`}
+                      >
+                        {c.name}
+                      </p>
+                    </button>
+                    <button
+                      onClick={() => toggleStatus(c)}
+                      className={`shrink-0 rounded-md px-2 py-1 text-xs font-medium transition-colors ${
+                        c.status === "open"
+                          ? "bg-accent/15 text-accent-soft"
+                          : "bg-ok/15 text-ok"
+                      }`}
+                    >
+                      {c.status === "open" ? "Open" : "Resolved"}
+                    </button>
+                  </div>
+                  <p className="mt-0.5 truncate text-xs text-muted">
+                    {c.buses?.name} · {c.volunteer_name}
+                  </p>
+                  {c.notes && (
+                    <p className="mt-1.5 text-sm leading-relaxed text-dim">{c.notes}</p>
+                  )}
+                </div>
+              </div>
+            </li>
+          ))}
+        </ul>
+      ) : (
+        <EmptyNote>
+          {complaints.length
+            ? "No complaints match these filters."
+            : "No complaints filed yet."}
+        </EmptyNote>
+      )}
+
+      {lightbox && (
+        <button
+          onClick={() => setLightbox(null)}
+          className="fixed inset-0 z-50 flex items-center justify-center bg-black/90 p-6"
+        >
+          {/* eslint-disable-next-line @next/next/no-img-element */}
+          <img src={lightbox} alt="ID card" className="max-h-full max-w-full rounded-lg object-contain" />
+        </button>
+      )}
+    </div>
+  );
+}
+
+function StudentProfile({
+  studentName,
+  entries,
+  complaints,
+  onClose,
+}: {
+  studentName: string;
+  entries: FeedbackRow[];
+  complaints: ComplaintRow[];
+  onClose: () => void;
+}) {
+  const marksGiven = entries.filter((e) => e.marks != null).map((e) => e.marks as number);
+  const avgMarks = marksGiven.length
+    ? (marksGiven.reduce((a, b) => a + b, 0) / marksGiven.length).toFixed(1)
+    : null;
+  const satisfactoryCount = entries.filter((e) => e.satisfaction === "satisfactory").length;
+  const unsatisfactoryCount = entries.filter((e) => e.satisfaction === "unsatisfactory").length;
+
+  return (
+    <div className="fixed inset-0 z-40 flex flex-col bg-bg">
+      <header className="flex items-center justify-between gap-3 border-b border-line px-5 py-4">
+        <div className="min-w-0">
+          <p className="truncate text-base font-semibold">{studentName}</p>
+          <p className="mt-0.5 text-xs text-muted">
+            {entries.length} feedback · {complaints.length} complaint
+            {complaints.length === 1 ? "" : "s"}
+          </p>
+        </div>
+        <button
+          onClick={onClose}
+          className="shrink-0 rounded-lg border border-line px-3 py-1.5 text-xs font-medium text-dim transition-colors active:bg-surface"
+        >
+          Close
+        </button>
+      </header>
+
+      <div className="flex-1 overflow-y-auto px-5 py-5">
+        <div className="mb-6 grid grid-cols-3 gap-2.5">
+          <div className="rounded-xl border border-line bg-surface p-3 text-center">
+            <p className="text-lg font-semibold">{avgMarks ?? "—"}</p>
+            <p className="mt-0.5 text-[11px] text-muted">Avg marks</p>
+          </div>
+          <div className="rounded-xl border border-line bg-surface p-3 text-center">
+            <p className="text-lg font-semibold text-ok">{satisfactoryCount}</p>
+            <p className="mt-0.5 text-[11px] text-muted">Satisfactory</p>
+          </div>
+          <div className="rounded-xl border border-line bg-surface p-3 text-center">
+            <p className="text-lg font-semibold text-danger">{unsatisfactoryCount}</p>
+            <p className="mt-0.5 text-[11px] text-muted">Unsatisfactory</p>
+          </div>
+        </div>
+
+        <p className="mb-2.5 px-1 text-xs font-medium uppercase tracking-wider text-muted">
+          Feedback history
+        </p>
+        <ul className="mb-6 space-y-2.5">
+          {entries.map((e) => (
+            <li key={e.id} className="rounded-xl border border-line bg-surface p-4">
+              <div className="flex items-start justify-between gap-2">
+                <p className="text-sm font-medium">{e.sessions?.label ?? "Session"}</p>
+                <div className="flex shrink-0 items-center gap-1.5">
+                  <SatisfactionBadge value={e.satisfaction} />
+                  {e.marks != null && (
+                    <span className="rounded-md bg-surface-2 px-2 py-1 text-xs font-semibold text-accent-soft">
+                      {e.marks}/10
+                    </span>
+                  )}
+                </div>
+              </div>
+              {e.ai_summary && (
+                <p className="mt-2 text-sm leading-relaxed text-dim">{e.ai_summary}</p>
+              )}
+              {e.notes && (
+                <p className="mt-2 text-xs leading-relaxed text-muted">Note: {e.notes}</p>
+              )}
+            </li>
+          ))}
+          {!entries.length && <EmptyNote>No feedback recorded for this learner.</EmptyNote>}
+        </ul>
+
+        <p className="mb-2.5 px-1 text-xs font-medium uppercase tracking-wider text-muted">
+          Complaints
+        </p>
+        <ul className="space-y-2.5">
+          {complaints.map((c) => (
+            <li key={c.id} className="flex gap-3 rounded-xl border border-line bg-surface p-4">
+              {c.photo_url && (
+                // eslint-disable-next-line @next/next/no-img-element
+                <img
+                  src={c.photo_url}
+                  alt="ID card"
+                  className="h-14 w-14 shrink-0 rounded-lg border border-line object-cover"
+                />
+              )}
+              <div className="min-w-0 flex-1">
+                <p className="text-xs text-muted">
+                  {c.buses?.name} · {c.volunteer_name}
+                </p>
+                {c.notes && <p className="mt-1 text-sm text-dim">{c.notes}</p>}
+              </div>
+            </li>
+          ))}
+          {!complaints.length && (
+            <EmptyNote>No complaints filed for this learner.</EmptyNote>
+          )}
+        </ul>
+      </div>
     </div>
   );
 }

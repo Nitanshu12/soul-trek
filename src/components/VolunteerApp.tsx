@@ -6,6 +6,12 @@ import { useLiveQuery } from "dexie-react-hooks";
 import { db, newId } from "@/lib/db";
 import { pendingCount, syncDown, syncUp } from "@/lib/sync";
 import { processPendingRecordings } from "@/lib/transcription";
+import {
+  complaintsPendingCount,
+  processPendingComplaintPhotos,
+  syncComplaintsDown,
+  syncComplaintsUp,
+} from "@/lib/complaints";
 import { getVolunteerName, setVolunteerName } from "@/lib/auth";
 import { useOnline } from "@/lib/useOnline";
 import type { Session, Student, FeedbackEntry } from "@/lib/types";
@@ -53,9 +59,12 @@ export default function VolunteerApp({ busId }: { busId: string }) {
   useEffect(() => {
     const run = async () => {
       await syncDown();
+      await syncComplaintsDown();
       await processPendingRecordings();
+      await processPendingComplaintPhotos();
       await syncUp();
-      setPending(await pendingCount());
+      await syncComplaintsUp();
+      setPending((await pendingCount()) + (await complaintsPendingCount()));
     };
     run();
     window.addEventListener("online", run);
@@ -81,9 +90,9 @@ export default function VolunteerApp({ busId }: { busId: string }) {
       : null;
 
   const flushSync = () =>
-    processPendingRecordings()
-      .then(syncUp)
-      .then(async () => setPending(await pendingCount()));
+    Promise.all([processPendingRecordings(), processPendingComplaintPhotos()])
+      .then(() => Promise.all([syncUp(), syncComplaintsUp()]))
+      .then(async () => setPending((await pendingCount()) + (await complaintsPendingCount())));
 
   async function addStudent(name: string) {
     await db.students.add({
@@ -114,6 +123,7 @@ export default function VolunteerApp({ busId }: { busId: string }) {
     transcript: string;
     ai_summary: string | null;
     marks: number | null;
+    satisfaction: "satisfactory" | "unsatisfactory" | null;
     notes: string;
     pendingAudio: Blob | null;
   }) {
@@ -139,6 +149,7 @@ export default function VolunteerApp({ busId }: { busId: string }) {
       transcript: payload.transcript,
       ai_summary: payload.ai_summary,
       marks: payload.marks,
+      satisfaction: payload.satisfaction,
       notes: payload.notes,
       created_at: existingEntry?.created_at ?? new Date().toISOString(),
       synced: 0,
@@ -211,6 +222,12 @@ export default function VolunteerApp({ busId }: { busId: string }) {
             </div>
           </div>
         </div>
+        <Link
+          href={`/bus/${busId}/complaints`}
+          className="shrink-0 rounded-lg border border-line px-3 py-1.5 text-xs font-medium text-dim transition-colors active:bg-surface"
+        >
+          Complaints
+        </Link>
       </header>
 
       <SessionPicker

@@ -1,7 +1,7 @@
 "use client";
 
 import { useState } from "react";
-import type { FeedbackEntry, Session, Student } from "@/lib/types";
+import type { FeedbackEntry, Satisfaction, Session, Student } from "@/lib/types";
 import { useAudioRecorder } from "@/lib/useAudioRecorder";
 import {
   RateLimitedError,
@@ -35,6 +35,7 @@ export default function FeedbackSheet({
     transcript: string;
     ai_summary: string | null;
     marks: number | null;
+    satisfaction: Satisfaction | null;
     notes: string;
     pendingAudio: Blob | null;
   }) => void;
@@ -43,6 +44,9 @@ export default function FeedbackSheet({
   const [transcript, setTranscript] = useState(existingEntry?.transcript ?? "");
   const [aiSummary, setAiSummary] = useState(existingEntry?.ai_summary ?? "");
   const [marks, setMarks] = useState<number | null>(existingEntry?.marks ?? null);
+  const [satisfaction, setSatisfaction] = useState<Satisfaction | null>(
+    existingEntry?.satisfaction ?? null
+  );
   const [notes, setNotes] = useState(existingEntry?.notes ?? "");
 
   const [stage, setStage] = useState<Stage>("idle");
@@ -95,6 +99,7 @@ export default function FeedbackSheet({
       transcript,
       ai_summary: aiSummary || null,
       marks,
+      satisfaction,
       notes,
       pendingAudio,
     });
@@ -220,6 +225,32 @@ export default function FeedbackSheet({
             <label className="mb-2 block text-xs font-medium uppercase tracking-wider text-muted">
               Marks
             </label>
+            <div className="mb-2.5 grid grid-cols-2 gap-2">
+              <button
+                onClick={() =>
+                  setSatisfaction(satisfaction === "satisfactory" ? null : "satisfactory")
+                }
+                className={`rounded-lg py-2.5 text-sm font-semibold transition-colors ${
+                  satisfaction === "satisfactory"
+                    ? "bg-ok/20 text-ok ring-1 ring-ok/40"
+                    : "border border-line bg-surface text-dim"
+                }`}
+              >
+                Satisfactory
+              </button>
+              <button
+                onClick={() =>
+                  setSatisfaction(satisfaction === "unsatisfactory" ? null : "unsatisfactory")
+                }
+                className={`rounded-lg py-2.5 text-sm font-semibold transition-colors ${
+                  satisfaction === "unsatisfactory"
+                    ? "bg-danger/20 text-danger ring-1 ring-danger/40"
+                    : "border border-line bg-surface text-dim"
+                }`}
+              >
+                Unsatisfactory
+              </button>
+            </div>
             <div className="grid grid-cols-10 gap-1.5">
               {Array.from({ length: 10 }, (_, i) => i + 1).map((n) => (
                 <button
