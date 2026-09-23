@@ -4,6 +4,7 @@ import { useEffect, useMemo, useState } from "react";
 import { useRouter } from "next/navigation";
 import { createClient } from "@/lib/supabase/client";
 import type { Bus, BusVolunteer, Satisfaction } from "@/lib/types";
+import ShareTab from "./ShareTab";
 
 interface Session {
   id: string;
@@ -41,7 +42,7 @@ interface ComplaintRow {
   buses: { name: string } | null;
 }
 
-type Tab = "feedback" | "complaints" | "buses";
+type Tab = "feedback" | "complaints" | "buses" | "share";
 
 const inputClass =
   "w-full rounded-lg border border-line bg-surface-2 px-3.5 py-2.5 text-sm text-fg transition-colors focus:border-accent";
@@ -136,6 +137,7 @@ export default function AdminDashboard({ adminName }: { adminName: string }) {
               ["feedback", "Feedback"],
               ["complaints", `Complaints${openComplaintCount ? ` (${openComplaintCount})` : ""}`],
               ["buses", "Buses"],
+              ["share", "Share"],
             ] as [Tab, string][]
           ).map(([key, label]) => (
             <button
@@ -171,6 +173,8 @@ export default function AdminDashboard({ adminName }: { adminName: string }) {
             onChange={refetchAll}
             onViewProfile={(id, name) => setProfileStudent({ id, name })}
           />
+        ) : tab === "share" ? (
+          <ShareTab />
         ) : (
           <FeedbackTab
             buses={buses}

@@ -83,8 +83,10 @@ export default function StudentList({
             className="space-y-2.5"
             onSubmit={(e) => {
               e.preventDefault();
-              const trimmed = name.trim();
-              if (trimmed) onAddStudent(trimmed, enrollmentNumber.trim());
+              const trimmedName = name.trim();
+              const trimmedEnrollment = enrollmentNumber.trim();
+              if (!trimmedName || !trimmedEnrollment) return;
+              onAddStudent(trimmedName, trimmedEnrollment);
               setName("");
               setEnrollmentNumber("");
               setAdding(false);
@@ -100,7 +102,7 @@ export default function StudentList({
             <input
               value={enrollmentNumber}
               onChange={(e) => setEnrollmentNumber(e.target.value)}
-              placeholder="Enrollment number (optional)"
+              placeholder="Enrollment number"
               className="w-full rounded-xl border border-line bg-surface-2 px-4 py-3 text-base text-fg focus:border-accent"
             />
             <div className="flex gap-2.5">
@@ -117,7 +119,7 @@ export default function StudentList({
               </button>
               <button
                 type="submit"
-                disabled={!name.trim()}
+                disabled={!name.trim() || !enrollmentNumber.trim()}
                 className="flex-1 rounded-xl bg-accent py-3 text-sm font-semibold text-accent-ink transition-opacity active:opacity-80 disabled:opacity-30"
               >
                 Add
