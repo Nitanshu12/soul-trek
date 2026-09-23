@@ -3,7 +3,7 @@
 import { useEffect, useMemo, useState } from "react";
 import { useRouter } from "next/navigation";
 import { createClient } from "@/lib/supabase/client";
-import type { Bus, Satisfaction } from "@/lib/types";
+import type { Bus, BusVolunteer, Satisfaction } from "@/lib/types";
 
 interface Session {
   id: string;
@@ -66,6 +66,7 @@ export default function AdminDashboard({ adminName }: { adminName: string }) {
   const [tab, setTab] = useState<Tab>("feedback");
 
   const [buses, setBuses] = useState<Bus[]>([]);
+  const [busVolunteers, setBusVolunteers] = useState<BusVolunteer[]>([]);
   const [sessions, setSessions] = useState<Session[]>([]);
   const [entries, setEntries] = useState<FeedbackRow[]>([]);
   const [complaints, setComplaints] = useState<ComplaintRow[]>([]);
@@ -78,8 +79,9 @@ export default function AdminDashboard({ adminName }: { adminName: string }) {
   async function refetchAll() {
     if (!supabase) return;
     setLoading(true);
-    const [busesRes, sessionsRes, entriesRes, complaintsRes] = await Promise.all([
+    const [busesRes, volunteersRes, sessionsRes, entriesRes, complaintsRes] = await Promise.all([
       supabase.from("buses").select("*").order("name"),
+      supabase.from("bus_volunteers").select("*").order("created_at"),
       supabase.from("sessions").select("id, label, date").order("date"),
       supabase
         .from("feedback_entries")
@@ -91,6 +93,7 @@ export default function AdminDashboard({ adminName }: { adminName: string }) {
         .order("created_at", { ascending: false }),
     ]);
     setBuses(busesRes.data ?? []);
+    setBusVolunteers(volunteersRes.data ?? []);
     setSessions(sessionsRes.data ?? []);
     setEntries((entriesRes.data as unknown as FeedbackRow[]) ?? []);
     setComplaints((complaintsRes.data as unknown as ComplaintRow[]) ?? []);
@@ -154,7 +157,12 @@ export default function AdminDashboard({ adminName }: { adminName: string }) {
         {loading ? (
           <p className="py-12 text-center text-sm text-muted">Loading…</p>
         ) : tab === "buses" ? (
-          <BusesTab buses={buses} onChange={refetchAll} supabase={supabase} />
+          <BusesTab
+            buses={buses}
+            busVolunteers={busVolunteers}
+            onChange={refetchAll}
+            supabase={supabase}
+          />
         ) : tab === "complaints" ? (
           <ComplaintsTab
             buses={buses}
@@ -200,15 +208,18 @@ function EmptyNote({ children }: { children: React.ReactNode }) {
 
 function BusesTab({
   buses,
+  busVolunteers,
   onChange,
   supabase,
 }: {
   buses: Bus[];
+  busVolunteers: BusVolunteer[];
   onChange: () => void;
   supabase: ReturnType<typeof createClient>;
 }) {
   const [name, setName] = useState("");
   const [saving, setSaving] = useState(false);
+  const [expandedBusId, setExpandedBusId] = useState<string | null>(null);
 
   async function addBus(e: React.FormEvent) {
     e.preventDefault();
@@ -247,19 +258,114 @@ function BusesTab({
         </p>
         {buses.length ? (
           <ul className="space-y-2">
-            {buses.map((bus) => (
-              <li
-                key={bus.id}
-                className="rounded-xl border border-line bg-surface px-4 py-3.5 text-sm font-medium"
-              >
-                {bus.name}
-              </li>
-            ))}
+            {buses.map((bus) => {
+              const roster = busVolunteers.filter((v) => v.bus_id === bus.id);
+              const isOpen = expandedBusId === bus.id;
+              return (
+                <li key={bus.id} className="rounded-xl border border-line bg-surface p-4">
+                  <button
+                    onClick={() => setExpandedBusId(isOpen ? null : bus.id)}
+                    className="flex w-full items-center justify-between gap-3 text-left"
+                  >
+                    <span className="text-sm font-medium">{bus.name}</span>
+                    <span className="shrink-0 text-xs text-muted">
+                      {roster.length
+                        ? roster.map((v) => v.name).join(", ")
+                        : "No volunteers assigned"}
+                    </span>
+                  </button>
+                  {isOpen && (
+                    <BusVolunteerRoster
+                      bus={bus}
+                      roster={roster}
+                      supabase={supabase}
+                      onChange={onChange}
+                    />
+                  )}
+                </li>
+              );
+            })}
           </ul>
         ) : (
           <EmptyNote>No buses yet — add your first one above.</EmptyNote>
         )}
       </div>
+    </div>
+  );
+}
+
+function BusVolunteerRoster({
+  bus,
+  roster,
+  supabase,
+  onChange,
+}: {
+  bus: Bus;
+  roster: BusVolunteer[];
+  supabase: ReturnType<typeof createClient>;
+  onChange: () => void;
+}) {
+  const [name, setName] = useState("");
+  const [saving, setSaving] = useState(false);
+
+  async function addVolunteer(e: React.FormEvent) {
+    e.preventDefault();
+    const trimmed = name.trim();
+    if (!trimmed || !supabase) return;
+    setSaving(true);
+    await supabase.from("bus_volunteers").insert({ bus_id: bus.id, name: trimmed });
+    setName("");
+    setSaving(false);
+    onChange();
+  }
+
+  async function removeVolunteer(id: string) {
+    if (!supabase) return;
+    await supabase.from("bus_volunteers").delete().eq("id", id);
+    onChange();
+  }
+
+  return (
+    <div className="mt-3 border-t border-line pt-3">
+      <p className="mb-2 text-xs font-medium uppercase tracking-wider text-muted">
+        Volunteers on this bus
+      </p>
+      {roster.length ? (
+        <ul className="mb-3 flex flex-wrap gap-1.5">
+          {roster.map((v) => (
+            <li
+              key={v.id}
+              className="flex items-center gap-1.5 rounded-full bg-surface-2 py-1 pl-3 pr-1.5 text-xs"
+            >
+              {v.name}
+              <button
+                onClick={() => removeVolunteer(v.id)}
+                className="flex h-4 w-4 items-center justify-center rounded-full text-muted transition-colors active:bg-danger/15 active:text-danger"
+                aria-label={`Remove ${v.name}`}
+              >
+                ×
+              </button>
+            </li>
+          ))}
+        </ul>
+      ) : (
+        <p className="mb-3 text-xs text-muted">No one assigned yet.</p>
+      )}
+      <form onSubmit={addVolunteer} className="flex gap-2">
+        <input
+          value={name}
+          onChange={(e) => setName(e.target.value)}
+          placeholder="Volunteer's name"
+          className={inputClass}
+        />
+        <button
+          type="submit"
+          disabled={saving || !name.trim()}
+          className="shrink-0 rounded-lg border border-line px-3 py-2.5 text-xs font-medium text-dim transition-colors active:bg-surface-2 disabled:opacity-30"
+        >
+          Add
+        </button>
+      </form>
     </div>
   );
 }

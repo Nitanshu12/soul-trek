@@ -56,6 +56,14 @@ create table if not exists complaints (
   created_at timestamptz not null default now()
 );
 
+-- Who's assigned to each bus, for accountability only — not a login.
+create table if not exists bus_volunteers (
+  id uuid primary key default gen_random_uuid(),
+  bus_id uuid not null references buses(id) on delete cascade,
+  name text not null,
+  created_at timestamptz not null default now()
+);
+
 -- Admin accounts only.
 create table if not exists profiles (
   id uuid primary key references auth.users(id) on delete cascade,
@@ -71,6 +79,7 @@ create index if not exists feedback_entries_session_id_idx on feedback_entries(s
 create index if not exists feedback_entries_student_id_idx on feedback_entries(student_id);
 create index if not exists complaints_bus_id_idx on complaints(bus_id);
 create index if not exists complaints_student_id_idx on complaints(student_id);
+create index if not exists bus_volunteers_bus_id_idx on bus_volunteers(bus_id);
 
 -- ---------- Helper function (security definer avoids recursive RLS on profiles) ----------
 
@@ -93,6 +102,7 @@ alter table sessions enable row level security;
 alter table students enable row level security;
 alter table feedback_entries enable row level security;
 alter table complaints enable row level security;
+alter table bus_volunteers enable row level security;
 alter table profiles enable row level security;
 
 -- buses: everyone can read the list (volunteers pick from it); only admins manage them.
@@ -134,6 +144,14 @@ create policy "complaints_insert_public" on complaints
   for insert with check (true);
 create policy "complaints_update_public" on complaints
   for update using (true);
+
+-- bus_volunteers: anyone can see who's assigned; only the admin edits the roster.
+create policy "bus_volunteers_select_public" on bus_volunteers
+  for select using (true);
+create policy "bus_volunteers_insert_admin" on bus_volunteers
+  for insert with check (is_admin());
+create policy "bus_volunteers_delete_admin" on bus_volunteers
+  for delete using (is_admin());
 
 -- profiles: an admin can see their own row; nothing is writable from the client.
 create policy "profiles_select_self" on profiles

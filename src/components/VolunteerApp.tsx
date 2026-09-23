@@ -14,7 +14,7 @@ import {
 } from "@/lib/complaints";
 import { getVolunteerName, setVolunteerName } from "@/lib/auth";
 import { useOnline } from "@/lib/useOnline";
-import type { Session, Student, FeedbackEntry } from "@/lib/types";
+import type { BusVolunteer, Session, Student, FeedbackEntry } from "@/lib/types";
 import SessionPicker from "./SessionPicker";
 import StudentList from "./StudentList";
 import FeedbackSheet from "./FeedbackSheet";
@@ -22,6 +22,7 @@ import FeedbackSheet from "./FeedbackSheet";
 const EMPTY_SESSIONS: Session[] = [];
 const EMPTY_STUDENTS: Student[] = [];
 const EMPTY_ENTRIES: FeedbackEntry[] = [];
+const EMPTY_VOLUNTEERS: BusVolunteer[] = [];
 
 export default function VolunteerApp({ busId }: { busId: string }) {
   const [selectedSessionId, setSelectedSessionId] = useState<string | null>(null);
@@ -42,6 +43,9 @@ export default function VolunteerApp({ busId }: { busId: string }) {
   const entries =
     useLiveQuery(() => db.entries.where("bus_id").equals(busId).toArray(), [busId]) ??
     EMPTY_ENTRIES;
+  const busVolunteers =
+    useLiveQuery(() => db.busVolunteers.where("bus_id").equals(busId).toArray(), [busId]) ??
+    EMPTY_VOLUNTEERS;
 
   // Default to the most recently created session until the volunteer picks another.
   const effectiveSessionId =
@@ -220,6 +224,11 @@ export default function VolunteerApp({ busId }: { busId: string }) {
                 {pending > 0 && ` · ${pending} to sync`}
               </p>
             </div>
+            {busVolunteers.length > 0 && (
+              <p className="mt-0.5 truncate text-[11px] text-muted">
+                On this bus: {busVolunteers.map((v) => v.name).join(", ")}
+              </p>
+            )}
           </div>
         </div>
         <Link

@@ -8,6 +8,15 @@ export interface Bus {
   created_at: string;
 }
 
+// Who's assigned to a bus, for accountability only — admin-managed, read by
+// anyone, cached locally like Bus since it's pull-only from the client.
+export interface BusVolunteer {
+  id: string;
+  bus_id: string;
+  name: string;
+  created_at: string;
+}
+
 export interface Session {
   id: string;
   label: string; // e.g. "Day 1", "Day 2 - Evening" — free text, volunteer chooses

@@ -88,7 +88,7 @@ export default function ComplaintForm({
           </datalist>
           {matchedStudent && (
             <p className="mt-1.5 text-xs text-ok">
-              Linked to {matchedStudent.name}&apos;s feedback profile
+              Linked to {matchedStudent.name}&apos;s profile
             </p>
           )}
         </div>

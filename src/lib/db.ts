@@ -1,6 +1,7 @@
 import Dexie, { type Table } from "dexie";
 import type {
   Bus,
+  BusVolunteer,
   Session,
   Student,
   FeedbackEntry,
@@ -17,6 +18,7 @@ class SoulTrekDB extends Dexie {
   recordings!: Table<PendingRecording, string>;
   complaints!: Table<Complaint, string>;
   complaintPhotos!: Table<PendingComplaintPhoto, string>;
+  busVolunteers!: Table<BusVolunteer, string>;
 
   constructor() {
     super("soul-trek-db");
@@ -31,6 +33,10 @@ class SoulTrekDB extends Dexie {
     this.version(4).stores({
       complaints: "id, bus_id, student_id, synced",
       complaintPhotos: "id, created_at",
+    });
+    this.version(5).stores({
+      // Also pull-only, same as buses.
+      busVolunteers: "id, bus_id",
     });
   }
 }

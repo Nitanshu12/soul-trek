@@ -1,6 +1,6 @@
 import { db } from "./db";
 import { supabase, supabaseConfigured } from "./supabase/client";
-import type { Bus, Session, Student, FeedbackEntry } from "./types";
+import type { Bus, BusVolunteer, Session, Student, FeedbackEntry } from "./types";
 
 let syncing = false;
 
@@ -45,6 +45,7 @@ export async function syncUp(): Promise<void> {
       transcript: e.transcript,
       ai_summary: e.ai_summary,
       marks: e.marks,
+      satisfaction: e.satisfaction,
       notes: e.notes,
       created_at: e.created_at,
     }));
@@ -76,6 +77,9 @@ export async function syncDown(): Promise<void> {
 
   const { data: remoteBuses } = await supabase.from("buses").select("*");
   if (remoteBuses) await db.buses.bulkPut(remoteBuses as Bus[]);
+
+  const { data: remoteVolunteers } = await supabase.from("bus_volunteers").select("*");
+  if (remoteVolunteers) await db.busVolunteers.bulkPut(remoteVolunteers as BusVolunteer[]);
 
   await pullTable<Session>("sessions", "sessions");
   await pullTable<Student>("students", "students");
