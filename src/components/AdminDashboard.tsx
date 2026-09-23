@@ -307,21 +307,33 @@ function BusVolunteerRoster({
 }) {
   const [name, setName] = useState("");
   const [saving, setSaving] = useState(false);
+  const [error, setError] = useState<string | null>(null);
 
   async function addVolunteer(e: React.FormEvent) {
     e.preventDefault();
     const trimmed = name.trim();
     if (!trimmed || !supabase) return;
     setSaving(true);
-    await supabase.from("bus_volunteers").insert({ bus_id: bus.id, name: trimmed });
-    setName("");
+    setError(null);
+    const { error: insertError } = await supabase
+      .from("bus_volunteers")
+      .insert({ bus_id: bus.id, name: trimmed });
     setSaving(false);
+    if (insertError) {
+      setError(insertError.message);
+      return;
+    }
+    setName("");
     onChange();
   }
 
   async function removeVolunteer(id: string) {
     if (!supabase) return;
-    await supabase.from("bus_volunteers").delete().eq("id", id);
+    const { error: deleteError } = await supabase.from("bus_volunteers").delete().eq("id", id);
+    if (deleteError) {
+      setError(deleteError.message);
+      return;
+    }
     onChange();
   }
 
@@ -350,6 +362,11 @@ function BusVolunteerRoster({
         </ul>
       ) : (
         <p className="mb-3 text-xs text-muted">No one assigned yet.</p>
+      )}
+      {error && (
+        <p className="mb-3 rounded-lg border border-danger/30 bg-danger/10 px-3 py-2 text-xs text-danger">
+          {error}
+        </p>
       )}
       <form onSubmit={addVolunteer} className="flex gap-2">
         <input
