@@ -2,8 +2,10 @@
 
 import { useEffect, useMemo, useState } from "react";
 import Link from "next/link";
+import { useRouter } from "next/navigation";
 import { useLiveQuery } from "dexie-react-hooks";
 import { db, newId } from "@/lib/db";
+import { createClient } from "@/lib/supabase/client";
 import { pendingCount, syncDown, syncUp } from "@/lib/sync";
 import { processPendingRecordings } from "@/lib/transcription";
 import {
@@ -25,8 +27,10 @@ const EMPTY_ENTRIES: FeedbackEntry[] = [];
 const EMPTY_VOLUNTEERS: BusVolunteer[] = [];
 
 export default function VolunteerApp({ busId }: { busId: string }) {
+  const router = useRouter();
   const [selectedSessionId, setSelectedSessionId] = useState<string | null>(null);
   const [activeStudentId, setActiveStudentId] = useState<string | null>(null);
+  const [studentSearch, setStudentSearch] = useState("");
   const online = useOnline();
   const [pending, setPending] = useState(0);
   const [volunteer, setVolunteer] = useState("");
@@ -83,6 +87,16 @@ export default function VolunteerApp({ busId }: { busId: string }) {
     () => entries.filter((e) => e.session_id === effectiveSessionId),
     [entries, effectiveSessionId]
   );
+
+  const visibleStudents = useMemo(() => {
+    const q = studentSearch.trim().toLowerCase();
+    if (!q) return students;
+    return students.filter(
+      (s) =>
+        s.name.toLowerCase().includes(q) ||
+        s.enrollment_number?.toLowerCase().includes(q)
+    );
+  }, [students, studentSearch]);
 
   const activeStudent = students.find((s) => s.id === activeStudentId) ?? null;
   const activeSession = sessions.find((s) => s.id === effectiveSessionId) ?? null;
@@ -163,6 +177,13 @@ export default function VolunteerApp({ busId }: { busId: string }) {
     flushSync();
   }
 
+  async function signOut() {
+    const supabase = createClient();
+    await supabase?.auth.signOut();
+    router.replace("/login");
+    router.refresh();
+  }
+
   if (askingName) {
     return (
       <div className="flex min-h-dvh flex-col justify-center px-5 py-12">
@@ -205,39 +226,39 @@ export default function VolunteerApp({ busId }: { busId: string }) {
   return (
     <div className="flex h-dvh flex-col">
       <header className="flex items-center justify-between gap-3 border-b border-line px-5 py-4">
-        <div className="flex min-w-0 items-center gap-3">
-          <Link
-            href="/"
-            className="shrink-0 rounded-lg border border-line px-2.5 py-1.5 text-sm text-dim transition-colors active:bg-surface"
-          >
-            ‹
-          </Link>
-          <div className="min-w-0">
-            <p className="truncate text-base font-semibold tracking-tight">
-              {bus?.name ?? "Bus"}
+        <div className="min-w-0">
+          <p className="truncate text-base font-semibold tracking-tight">
+            {bus?.name ?? "Bus"}
+          </p>
+          <div className="mt-0.5 flex items-center gap-1.5">
+            <span
+              className={`h-1.5 w-1.5 shrink-0 rounded-full ${online ? "bg-ok" : "bg-danger"}`}
+            />
+            <p className="truncate text-xs text-muted">
+              {volunteer}
+              {pending > 0 && ` · ${pending} to sync`}
             </p>
-            <div className="mt-0.5 flex items-center gap-1.5">
-              <span
-                className={`h-1.5 w-1.5 shrink-0 rounded-full ${online ? "bg-ok" : "bg-danger"}`}
-              />
-              <p className="truncate text-xs text-muted">
-                {volunteer}
-                {pending > 0 && ` · ${pending} to sync`}
-              </p>
-            </div>
-            {busVolunteers.length > 0 && (
-              <p className="mt-0.5 truncate text-[11px] text-muted">
-                On this bus: {busVolunteers.map((v) => v.name).join(", ")}
-              </p>
-            )}
           </div>
+          {busVolunteers.length > 0 && (
+            <p className="mt-0.5 truncate text-[11px] text-muted">
+              On this bus: {busVolunteers.map((v) => v.name).join(", ")}
+            </p>
+          )}
         </div>
-        <Link
-          href={`/bus/${busId}/complaints`}
-          className="shrink-0 rounded-lg border border-line px-3 py-1.5 text-xs font-medium text-dim transition-colors active:bg-surface"
-        >
-          Complaints
-        </Link>
+        <div className="flex shrink-0 items-center gap-2">
+          <Link
+            href={`/bus/${busId}/complaints`}
+            className="rounded-lg border border-line px-3 py-1.5 text-xs font-medium text-dim transition-colors active:bg-surface"
+          >
+            Complaints
+          </Link>
+          <button
+            onClick={signOut}
+            className="rounded-lg border border-line px-3 py-1.5 text-xs font-medium text-dim transition-colors active:bg-surface"
+          >
+            Sign out
+          </button>
+        </div>
       </header>
 
       <SessionPicker
@@ -248,9 +269,12 @@ export default function VolunteerApp({ busId }: { busId: string }) {
       />
 
       <StudentList
-        students={students}
+        students={visibleStudents}
+        totalStudentCount={students.length}
         entries={sessionEntries}
         sessionSelected={Boolean(effectiveSessionId)}
+        search={studentSearch}
+        onSearchChange={setStudentSearch}
         onAddStudent={addStudent}
         onOpenFeedback={(id) => {
           if (!effectiveSessionId) return;

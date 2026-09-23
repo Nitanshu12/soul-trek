@@ -1,7 +1,9 @@
 import { createServerClient } from "@supabase/ssr";
 import { NextResponse, type NextRequest } from "next/server";
 
-// Only /admin is gated. Volunteers use the app without signing in.
+// Everything needs a login again. A volunteer's profile pins them to one bus
+// (profiles.bus_id); this enforces that at the route level too, not just via
+// RLS, so a volunteer never lands on a blank screen for the wrong bus.
 export async function proxy(request: NextRequest) {
   let response = NextResponse.next({ request });
 
@@ -29,27 +31,42 @@ export async function proxy(request: NextRequest) {
   } = await supabase.auth.getUser();
 
   const path = request.nextUrl.pathname;
+  const isLoginPage = path === "/login";
 
-  if (path.startsWith("/admin")) {
-    if (!user) return NextResponse.redirect(new URL("/login", request.url));
-
-    const { data: profile } = await supabase
-      .from("profiles")
-      .select("role")
-      .eq("id", user.id)
-      .single();
-    if (profile?.role !== "admin") {
-      return NextResponse.redirect(new URL("/", request.url));
-    }
+  if (!user) {
+    if (isLoginPage) return response;
+    return NextResponse.redirect(new URL("/login", request.url));
   }
 
-  if (user && path === "/login") {
-    return NextResponse.redirect(new URL("/admin", request.url));
+  if (isLoginPage) {
+    return NextResponse.redirect(new URL("/", request.url));
+  }
+
+  const { data: profile } = await supabase
+    .from("profiles")
+    .select("role, bus_id")
+    .eq("id", user.id)
+    .single();
+
+  if (path.startsWith("/admin") && profile?.role !== "admin") {
+    return NextResponse.redirect(new URL("/", request.url));
+  }
+
+  if (path.startsWith("/bus/") && profile?.role !== "admin") {
+    const requestedBusId = path.split("/")[2];
+    if (profile?.bus_id && requestedBusId !== profile.bus_id) {
+      const rest = path.split("/").slice(3).join("/");
+      return NextResponse.redirect(
+        new URL(`/bus/${profile.bus_id}${rest ? `/${rest}` : ""}`, request.url)
+      );
+    }
   }
 
   return response;
 }
 
 export const config = {
-  matcher: ["/admin/:path*", "/login"],
+  matcher: [
+    "/((?!_next/static|_next/image|favicon.ico|manifest.json|icon-192.png|icon-512.png|api/).*)",
+  ],
 };

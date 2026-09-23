@@ -1,13 +1,13 @@
 "use client";
 
 import { useState } from "react";
-import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { createClient } from "@/lib/supabase/client";
+import { usernameToEmail } from "@/lib/auth";
 
 export default function LoginPage() {
   const router = useRouter();
-  const [email, setEmail] = useState("");
+  const [identifier, setIdentifier] = useState("");
   const [password, setPassword] = useState("");
   const [error, setError] = useState<string | null>(null);
   const [loading, setLoading] = useState(false);
@@ -24,18 +24,19 @@ export default function LoginPage() {
       return;
     }
 
+    const email = usernameToEmail(identifier);
     const { error: signInError } = await supabase.auth.signInWithPassword({
-      email: email.trim().toLowerCase(),
+      email,
       password,
     });
 
     setLoading(false);
     if (signInError) {
-      setError("Incorrect email or password.");
+      setError("Incorrect username/email or password.");
       return;
     }
 
-    router.replace("/admin");
+    router.replace("/");
     router.refresh();
   }
 
@@ -46,19 +47,20 @@ export default function LoginPage() {
           <div className="mx-auto mb-5 flex h-14 w-14 items-center justify-center rounded-2xl bg-accent/15 ring-1 ring-accent/30">
             <span className="h-5 w-5 rounded-full border-2 border-accent" />
           </div>
-          <h1 className="text-2xl font-semibold tracking-tight">Admin sign in</h1>
-          <p className="mt-1.5 text-sm text-dim">Soul Trek · Haridwar</p>
+          <h1 className="text-2xl font-semibold tracking-tight">Soul Trek</h1>
+          <p className="mt-1.5 text-sm text-dim">Sign in to continue</p>
         </div>
 
         <form onSubmit={handleSubmit} className="space-y-3">
           <div>
-            <label className="mb-1.5 block text-xs font-medium text-dim">Email</label>
+            <label className="mb-1.5 block text-xs font-medium text-dim">
+              Username (or admin email)
+            </label>
             <input
               autoFocus
-              type="email"
-              value={email}
-              onChange={(e) => setEmail(e.target.value)}
-              placeholder="you@example.com"
+              value={identifier}
+              onChange={(e) => setIdentifier(e.target.value)}
+              placeholder="e.g. bus1"
               autoCapitalize="none"
               autoCorrect="off"
               className="w-full rounded-xl border border-line bg-surface px-4 py-3 text-base text-fg transition-colors focus:border-accent"
@@ -84,7 +86,7 @@ export default function LoginPage() {
 
           <button
             type="submit"
-            disabled={loading || !email.trim() || !password}
+            disabled={loading || !identifier.trim() || !password}
             className="w-full rounded-xl bg-accent px-4 py-3.5 text-base font-semibold text-accent-ink transition-opacity active:opacity-80 disabled:opacity-30"
           >
             {loading ? "Signing in…" : "Sign in"}
@@ -92,10 +94,7 @@ export default function LoginPage() {
         </form>
 
         <p className="mt-8 text-center text-xs leading-relaxed text-muted">
-          Volunteers don&apos;t need to sign in —{" "}
-          <Link href="/" className="underline underline-offset-4">
-            go to the bus list
-          </Link>
+          Don&apos;t have a login? Ask your Soul Trek admin to create one for you.
         </p>
       </div>
     </div>

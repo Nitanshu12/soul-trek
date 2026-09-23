@@ -42,7 +42,15 @@ interface ComplaintRow {
   buses: { name: string } | null;
 }
 
-type Tab = "feedback" | "complaints" | "buses" | "share";
+type Tab = "feedback" | "complaints" | "buses" | "volunteers" | "share";
+
+interface VolunteerProfile {
+  id: string;
+  username: string | null;
+  display_name: string | null;
+  bus_id: string | null;
+  created_at: string;
+}
 
 const inputClass =
   "w-full rounded-lg border border-line bg-surface-2 px-3.5 py-2.5 text-sm text-fg transition-colors focus:border-accent";
@@ -68,6 +76,7 @@ export default function AdminDashboard({ adminName }: { adminName: string }) {
 
   const [buses, setBuses] = useState<Bus[]>([]);
   const [busVolunteers, setBusVolunteers] = useState<BusVolunteer[]>([]);
+  const [volunteerLogins, setVolunteerLogins] = useState<VolunteerProfile[]>([]);
   const [sessions, setSessions] = useState<Session[]>([]);
   const [entries, setEntries] = useState<FeedbackRow[]>([]);
   const [complaints, setComplaints] = useState<ComplaintRow[]>([]);
@@ -80,21 +89,28 @@ export default function AdminDashboard({ adminName }: { adminName: string }) {
   async function refetchAll() {
     if (!supabase) return;
     setLoading(true);
-    const [busesRes, volunteersRes, sessionsRes, entriesRes, complaintsRes] = await Promise.all([
-      supabase.from("buses").select("*").order("name"),
-      supabase.from("bus_volunteers").select("*").order("created_at"),
-      supabase.from("sessions").select("id, label, date").order("date"),
-      supabase
-        .from("feedback_entries")
-        .select("*, students(name, enrollment_number), buses(name), sessions(label, date)")
-        .order("created_at", { ascending: false }),
-      supabase
-        .from("complaints")
-        .select("*, buses(name)")
-        .order("created_at", { ascending: false }),
-    ]);
+    const [busesRes, volunteersRes, loginsRes, sessionsRes, entriesRes, complaintsRes] =
+      await Promise.all([
+        supabase.from("buses").select("*").order("name"),
+        supabase.from("bus_volunteers").select("*").order("created_at"),
+        supabase
+          .from("profiles")
+          .select("id, username, display_name, bus_id, created_at")
+          .eq("role", "volunteer")
+          .order("created_at"),
+        supabase.from("sessions").select("id, label, date").order("date"),
+        supabase
+          .from("feedback_entries")
+          .select("*, students(name, enrollment_number), buses(name), sessions(label, date)")
+          .order("created_at", { ascending: false }),
+        supabase
+          .from("complaints")
+          .select("*, buses(name)")
+          .order("created_at", { ascending: false }),
+      ]);
     setBuses(busesRes.data ?? []);
     setBusVolunteers(volunteersRes.data ?? []);
+    setVolunteerLogins(loginsRes.data ?? []);
     setSessions(sessionsRes.data ?? []);
     setEntries((entriesRes.data as unknown as FeedbackRow[]) ?? []);
     setComplaints((complaintsRes.data as unknown as ComplaintRow[]) ?? []);
@@ -137,6 +153,7 @@ export default function AdminDashboard({ adminName }: { adminName: string }) {
               ["feedback", "Feedback"],
               ["complaints", `Complaints${openComplaintCount ? ` (${openComplaintCount})` : ""}`],
               ["buses", "Buses"],
+              ["volunteers", "Volunteers"],
               ["share", "Share"],
             ] as [Tab, string][]
           ).map(([key, label]) => (
@@ -173,6 +190,8 @@ export default function AdminDashboard({ adminName }: { adminName: string }) {
             onChange={refetchAll}
             onViewProfile={(id, name) => setProfileStudent({ id, name })}
           />
+        ) : tab === "volunteers" ? (
+          <VolunteersTab buses={buses} volunteers={volunteerLogins} onChange={refetchAll} />
         ) : tab === "share" ? (
           <ShareTab />
         ) : (
@@ -387,6 +406,194 @@ function BusVolunteerRoster({
           Add
         </button>
       </form>
+    </div>
+  );
+}
+
+function VolunteersTab({
+  buses,
+  volunteers,
+  onChange,
+}: {
+  buses: Bus[];
+  volunteers: VolunteerProfile[];
+  onChange: () => void;
+}) {
+  const [username, setUsername] = useState("");
+  const [displayName, setDisplayName] = useState("");
+  const [password, setPassword] = useState("");
+  const [busId, setBusId] = useState("");
+  const [error, setError] = useState<string | null>(null);
+  const [saving, setSaving] = useState(false);
+
+  const busName = (id: string | null) => buses.find((b) => b.id === id)?.name ?? "—";
+
+  async function addVolunteer(e: React.FormEvent) {
+    e.preventDefault();
+    setError(null);
+    if (!username.trim() || !password || !busId) {
+      setError("Username, password and bus are all required.");
+      return;
+    }
+    setSaving(true);
+    const res = await fetch("/api/admin/create-volunteer", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ username, password, displayName, busId }),
+    });
+    const data = await res.json();
+    setSaving(false);
+    if (!res.ok) {
+      setError(data.error ?? "Failed to create volunteer");
+      return;
+    }
+    setUsername("");
+    setDisplayName("");
+    setPassword("");
+    setBusId("");
+    onChange();
+  }
+
+  async function resetPassword(volunteerId: string) {
+    const newPassword = prompt("New password for this login (min 6 characters):");
+    if (!newPassword) return;
+    const res = await fetch("/api/admin/reset-password", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ volunteerId, newPassword }),
+    });
+    const data = await res.json();
+    alert(res.ok ? "Password updated." : data.error ?? "Failed to reset password");
+  }
+
+  async function removeVolunteer(volunteerId: string, label: string) {
+    if (!confirm(`Remove login "${label}"? This can't be undone.`)) return;
+    const res = await fetch("/api/admin/delete-volunteer", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ volunteerId }),
+    });
+    const data = await res.json();
+    if (!res.ok) alert(data.error ?? "Failed to remove volunteer");
+    else onChange();
+  }
+
+  return (
+    <div className="space-y-5">
+      <SectionCard title="Add a bus login">
+        {buses.length === 0 && (
+          <p className="mb-4 rounded-lg border border-accent/25 bg-accent/10 px-3 py-2.5 text-xs text-accent-soft">
+            Create a bus first — every login must be assigned to one.
+          </p>
+        )}
+        <form onSubmit={addVolunteer} className="space-y-3">
+          <div>
+            <label className="mb-1.5 block text-xs font-medium text-dim">Username</label>
+            <input
+              value={username}
+              onChange={(e) => setUsername(e.target.value)}
+              placeholder="bus1"
+              autoCapitalize="none"
+              autoCorrect="off"
+              className={inputClass}
+            />
+          </div>
+
+          <div>
+            <label className="mb-1.5 block text-xs font-medium text-dim">
+              Display name <span className="text-muted">(optional)</span>
+            </label>
+            <input
+              value={displayName}
+              onChange={(e) => setDisplayName(e.target.value)}
+              placeholder="Bus 1 volunteers"
+              className={inputClass}
+            />
+          </div>
+
+          <div>
+            <label className="mb-1.5 block text-xs font-medium text-dim">Password</label>
+            <input
+              value={password}
+              onChange={(e) => setPassword(e.target.value)}
+              placeholder="At least 6 characters"
+              autoCapitalize="none"
+              autoCorrect="off"
+              className={inputClass}
+            />
+          </div>
+
+          <div>
+            <label className="mb-1.5 block text-xs font-medium text-dim">Assign to bus</label>
+            <select
+              value={busId}
+              onChange={(e) => setBusId(e.target.value)}
+              className={`${inputClass} ${busId ? "" : "text-muted"}`}
+            >
+              <option value="">Select a bus…</option>
+              {buses.map((bus) => (
+                <option key={bus.id} value={bus.id}>
+                  {bus.name}
+                </option>
+              ))}
+            </select>
+          </div>
+
+          {error && (
+            <p className="rounded-lg border border-danger/30 bg-danger/10 px-3 py-2.5 text-xs text-danger">
+              {error}
+            </p>
+          )}
+
+          <button
+            type="submit"
+            disabled={saving}
+            className="w-full rounded-lg bg-accent py-3 text-sm font-semibold text-accent-ink transition-opacity active:opacity-80 disabled:opacity-30"
+          >
+            {saving ? "Creating…" : "Create login"}
+          </button>
+        </form>
+      </SectionCard>
+
+      <div>
+        <p className="mb-2.5 px-1 text-xs font-medium uppercase tracking-wider text-muted">
+          {volunteers.length} {volunteers.length === 1 ? "login" : "logins"}
+        </p>
+        {volunteers.length ? (
+          <ul className="space-y-2">
+            {volunteers.map((v) => (
+              <li key={v.id} className="rounded-xl border border-line bg-surface px-4 py-3.5">
+                <div className="flex items-start justify-between gap-3">
+                  <div className="min-w-0">
+                    <p className="truncate text-sm font-medium">
+                      {v.display_name || v.username}
+                    </p>
+                    <p className="mt-0.5 truncate text-xs text-muted">
+                      @{v.username} · {busName(v.bus_id)}
+                    </p>
+                  </div>
+                  <div className="flex shrink-0 gap-2">
+                    <button
+                      onClick={() => resetPassword(v.id)}
+                      className="rounded-md border border-line px-2.5 py-1.5 text-xs font-medium text-dim transition-colors active:bg-surface-2"
+                    >
+                      Reset
+                    </button>
+                    <button
+                      onClick={() => removeVolunteer(v.id, v.display_name || v.username || "")}
+                      className="rounded-md border border-danger/30 px-2.5 py-1.5 text-xs font-medium text-danger transition-colors active:bg-danger/10"
+                    >
+                      Remove
+                    </button>
+                  </div>
+                </div>
+              </li>
+            ))}
+          </ul>
+        ) : (
+          <EmptyNote>No logins yet.</EmptyNote>
+        )}
+      </div>
     </div>
   );
 }

@@ -5,14 +5,20 @@ import type { FeedbackEntry, Student } from "@/lib/types";
 
 export default function StudentList({
   students,
+  totalStudentCount,
   entries,
   sessionSelected,
+  search,
+  onSearchChange,
   onAddStudent,
   onOpenFeedback,
 }: {
   students: Student[];
+  totalStudentCount: number;
   entries: FeedbackEntry[];
   sessionSelected: boolean;
+  search: string;
+  onSearchChange: (value: string) => void;
   onAddStudent: (name: string, enrollmentNumber: string) => void;
   onOpenFeedback: (studentId: string) => void;
 }) {
@@ -26,7 +32,16 @@ export default function StudentList({
   return (
     <>
       <div className="flex-1 overflow-y-auto px-5 pb-32 pt-4">
-        {!sessionSelected && students.length > 0 && (
+        {totalStudentCount > 0 && (
+          <input
+            value={search}
+            onChange={(e) => onSearchChange(e.target.value)}
+            placeholder="Search by name or enrollment number…"
+            className="mb-3 w-full rounded-xl border border-line bg-surface px-4 py-2.5 text-sm text-fg focus:border-accent"
+          />
+        )}
+
+        {!sessionSelected && totalStudentCount > 0 && (
           <p className="mb-4 rounded-lg border border-accent/25 bg-accent/10 px-3.5 py-2.5 text-xs text-accent-soft">
             Pick or create a session above before recording feedback.
           </p>
@@ -40,7 +55,9 @@ export default function StudentList({
 
         {students.length === 0 ? (
           <p className="py-16 text-center text-sm text-muted">
-            No learners on this bus yet.
+            {totalStudentCount === 0
+              ? "No learners on this bus yet."
+              : "No learners match your search."}
           </p>
         ) : (
           <ul className="space-y-2">
