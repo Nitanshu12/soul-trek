@@ -25,7 +25,15 @@ export async function POST(req: Request) {
     );
   }
 
-  const admin = createAdminClient();
+  let admin;
+  try {
+    admin = createAdminClient();
+  } catch (err) {
+    return Response.json(
+      { error: err instanceof Error ? err.message : "Server is missing its service role key" },
+      { status: 500 }
+    );
+  }
   const { error } = await admin.auth.admin.updateUserById(volunteerId, {
     password: newPassword,
   });

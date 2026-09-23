@@ -26,7 +26,15 @@ export async function POST(req: Request) {
     return Response.json({ error: "Password must be at least 6 characters" }, { status: 400 });
   }
 
-  const admin = createAdminClient();
+  let admin;
+  try {
+    admin = createAdminClient();
+  } catch (err) {
+    return Response.json(
+      { error: err instanceof Error ? err.message : "Server is missing its service role key" },
+      { status: 500 }
+    );
+  }
   const email = usernameToEmail(username);
 
   const { data: created, error: createError } = await admin.auth.admin.createUser({
