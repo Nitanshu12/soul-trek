@@ -188,7 +188,7 @@ export default function FeedbackSheet({
                 Transcript
               </label>
               <span className="rounded-md bg-surface-2 px-2 py-0.5 text-[11px] font-medium text-dim">
-                Hinglish · Roman script
+                Hinglish
               </span>
             </div>
             <textarea
