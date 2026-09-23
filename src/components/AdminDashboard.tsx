@@ -23,7 +23,7 @@ interface FeedbackRow {
   satisfaction: Satisfaction | null;
   notes: string;
   created_at: string;
-  students: { name: string } | null;
+  students: { name: string; enrollment_number: string | null } | null;
   buses: { name: string } | null;
   sessions: { label: string; date: string } | null;
 }
@@ -85,7 +85,7 @@ export default function AdminDashboard({ adminName }: { adminName: string }) {
       supabase.from("sessions").select("id, label, date").order("date"),
       supabase
         .from("feedback_entries")
-        .select("*, students(name), buses(name), sessions(label, date)")
+        .select("*, students(name, enrollment_number), buses(name), sessions(label, date)")
         .order("created_at", { ascending: false }),
       supabase
         .from("complaints")
@@ -413,6 +413,7 @@ function FeedbackTab({
   function exportCsv() {
     const header = [
       "Learner",
+      "Enrollment No.",
       "Bus",
       "Session",
       "Date",
@@ -425,6 +426,7 @@ function FeedbackTab({
     ];
     const rows = filtered.map((e) => [
       e.students?.name ?? "",
+      e.students?.enrollment_number ?? "",
       e.buses?.name ?? "",
       e.sessions?.label ?? "",
       e.sessions?.date ?? "",
@@ -506,6 +508,11 @@ function FeedbackTab({
                   >
                     <p className="truncate text-sm font-medium underline decoration-line decoration-dotted underline-offset-4">
                       {e.students?.name ?? "Unknown learner"}
+                      {e.students?.enrollment_number && (
+                        <span className="ml-1.5 font-normal text-muted">
+                          · {e.students.enrollment_number}
+                        </span>
+                      )}
                     </p>
                     <p className="mt-0.5 truncate text-xs text-muted">
                       {e.buses?.name} · {e.sessions?.label} · {e.volunteer_name}
@@ -718,6 +725,8 @@ function StudentProfile({
     : null;
   const satisfactoryCount = entries.filter((e) => e.satisfaction === "satisfactory").length;
   const unsatisfactoryCount = entries.filter((e) => e.satisfaction === "unsatisfactory").length;
+  const enrollmentNumber = entries.find((e) => e.students?.enrollment_number)?.students
+    ?.enrollment_number;
 
   return (
     <div className="fixed inset-0 z-40 flex flex-col bg-bg">
@@ -725,6 +734,7 @@ function StudentProfile({
         <div className="min-w-0">
           <p className="truncate text-base font-semibold">{studentName}</p>
           <p className="mt-0.5 text-xs text-muted">
+            {enrollmentNumber && `${enrollmentNumber} · `}
             {entries.length} feedback · {complaints.length} complaint
             {complaints.length === 1 ? "" : "s"}
           </p>

@@ -13,11 +13,12 @@ export default function StudentList({
   students: Student[];
   entries: FeedbackEntry[];
   sessionSelected: boolean;
-  onAddStudent: (name: string) => void;
+  onAddStudent: (name: string, enrollmentNumber: string) => void;
   onOpenFeedback: (studentId: string) => void;
 }) {
   const [adding, setAdding] = useState(false);
   const [name, setName] = useState("");
+  const [enrollmentNumber, setEnrollmentNumber] = useState("");
 
   const doneStudentIds = new Set(entries.map((e) => e.student_id));
   const doneCount = students.filter((s) => doneStudentIds.has(s.id)).length;
@@ -51,9 +52,14 @@ export default function StudentList({
                     onClick={() => onOpenFeedback(student.id)}
                     className="flex w-full items-center justify-between gap-3 rounded-xl border border-line bg-surface px-4 py-4 text-left transition-colors active:bg-surface-2"
                   >
-                    <span className="min-w-0 truncate text-sm font-medium">
-                      {student.name}
-                    </span>
+                    <div className="min-w-0">
+                      <p className="truncate text-sm font-medium">{student.name}</p>
+                      {student.enrollment_number && (
+                        <p className="mt-0.5 truncate text-xs text-muted">
+                          {student.enrollment_number}
+                        </p>
+                      )}
+                    </div>
                     {sessionSelected && (
                       <span
                         className={`shrink-0 rounded-md px-2 py-1 text-xs font-medium ${
@@ -74,12 +80,13 @@ export default function StudentList({
       <div className="border-t border-line bg-bg px-5 py-4 pb-[max(1rem,env(safe-area-inset-bottom))]">
         {adding ? (
           <form
-            className="flex gap-2.5"
+            className="space-y-2.5"
             onSubmit={(e) => {
               e.preventDefault();
               const trimmed = name.trim();
-              if (trimmed) onAddStudent(trimmed);
+              if (trimmed) onAddStudent(trimmed, enrollmentNumber.trim());
               setName("");
+              setEnrollmentNumber("");
               setAdding(false);
             }}
           >
@@ -87,16 +94,35 @@ export default function StudentList({
               autoFocus
               value={name}
               onChange={(e) => setName(e.target.value)}
-              onBlur={() => !name.trim() && setAdding(false)}
               placeholder="Learner's name"
-              className="min-w-0 flex-1 rounded-xl border border-line bg-surface-2 px-4 py-3 text-base text-fg focus:border-accent"
+              className="w-full rounded-xl border border-line bg-surface-2 px-4 py-3 text-base text-fg focus:border-accent"
             />
-            <button
-              type="submit"
-              className="shrink-0 rounded-xl bg-accent px-5 py-3 text-sm font-semibold text-accent-ink transition-opacity active:opacity-80"
-            >
-              Add
-            </button>
+            <input
+              value={enrollmentNumber}
+              onChange={(e) => setEnrollmentNumber(e.target.value)}
+              placeholder="Enrollment number (optional)"
+              className="w-full rounded-xl border border-line bg-surface-2 px-4 py-3 text-base text-fg focus:border-accent"
+            />
+            <div className="flex gap-2.5">
+              <button
+                type="button"
+                onClick={() => {
+                  setAdding(false);
+                  setName("");
+                  setEnrollmentNumber("");
+                }}
+                className="flex-1 rounded-xl border border-line py-3 text-sm font-medium text-dim transition-colors active:bg-surface-2"
+              >
+                Cancel
+              </button>
+              <button
+                type="submit"
+                disabled={!name.trim()}
+                className="flex-1 rounded-xl bg-accent py-3 text-sm font-semibold text-accent-ink transition-opacity active:opacity-80 disabled:opacity-30"
+              >
+                Add
+              </button>
+            </div>
           </form>
         ) : (
           <button

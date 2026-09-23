@@ -27,6 +27,7 @@ create table if not exists students (
   id uuid primary key default gen_random_uuid(),
   bus_id uuid not null references buses(id) on delete cascade,
   name text not null,
+  enrollment_number text,
   created_at timestamptz not null default now()
 );
 

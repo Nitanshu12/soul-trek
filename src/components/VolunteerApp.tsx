@@ -98,11 +98,12 @@ export default function VolunteerApp({ busId }: { busId: string }) {
       .then(() => Promise.all([syncUp(), syncComplaintsUp()]))
       .then(async () => setPending((await pendingCount()) + (await complaintsPendingCount())));
 
-  async function addStudent(name: string) {
+  async function addStudent(name: string, enrollmentNumber: string) {
     await db.students.add({
       id: newId(),
       bus_id: busId,
       name,
+      enrollment_number: enrollmentNumber || null,
       created_at: new Date().toISOString(),
       synced: 0,
     });

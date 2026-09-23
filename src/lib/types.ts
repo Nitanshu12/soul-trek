@@ -29,6 +29,7 @@ export interface Student {
   id: string;
   bus_id: string;
   name: string;
+  enrollment_number: string | null;
   created_at: string;
   synced: 0 | 1;
 }
