@@ -16,7 +16,8 @@ export default function ComplaintForm({
   const [notes, setNotes] = useState("");
   const [photo, setPhoto] = useState<File | null>(null);
   const [photoUrl, setPhotoUrl] = useState<string | null>(null);
-  const fileInputRef = useRef<HTMLInputElement>(null);
+  const cameraInputRef = useRef<HTMLInputElement>(null);
+  const galleryInputRef = useRef<HTMLInputElement>(null);
 
   const matchedStudent = useMemo(() => {
     const trimmed = name.trim().toLowerCase();
@@ -97,35 +98,57 @@ export default function ComplaintForm({
           <label className="mb-2 block text-xs font-medium uppercase tracking-wider text-muted">
             ID card photo
           </label>
+          {/* Two separate inputs so the choice is explicit: "capture" forces the
+              camera on mobile, while a plain file input opens the gallery/Files picker. */}
           <input
-            ref={fileInputRef}
+            ref={cameraInputRef}
             type="file"
             accept="image/*"
             capture="environment"
             onChange={handlePhotoChange}
             className="hidden"
           />
-          {photoUrl ? (
-            <button
-              type="button"
-              onClick={() => fileInputRef.current?.click()}
-              className="block w-full overflow-hidden rounded-xl border border-line"
-            >
+          <input
+            ref={galleryInputRef}
+            type="file"
+            accept="image/*"
+            onChange={handlePhotoChange}
+            className="hidden"
+          />
+
+          {photoUrl && (
+            <div className="mb-2.5 overflow-hidden rounded-xl border border-line">
               {/* eslint-disable-next-line @next/next/no-img-element */}
-              <img src={photoUrl} alt="ID card" className="max-h-72 w-full object-contain bg-surface-2" />
-            </button>
-          ) : (
+              <img
+                src={photoUrl}
+                alt="ID card"
+                className="max-h-72 w-full object-contain bg-surface-2"
+              />
+            </div>
+          )}
+
+          <div className="flex gap-2.5">
             <button
               type="button"
-              onClick={() => fileInputRef.current?.click()}
-              className="flex w-full flex-col items-center justify-center gap-2 rounded-xl border border-dashed border-line bg-surface py-10 text-sm text-dim transition-colors active:bg-surface-2"
+              onClick={() => cameraInputRef.current?.click()}
+              className="flex flex-1 flex-col items-center justify-center gap-2 rounded-xl border border-dashed border-line bg-surface py-8 text-sm text-dim transition-colors active:bg-surface-2"
             >
-              <span className="flex h-12 w-12 items-center justify-center rounded-full bg-accent/15">
-                <span className="h-5 w-5 rounded-sm border-2 border-accent" />
+              <span className="flex h-10 w-10 items-center justify-center rounded-full bg-accent/15">
+                <span className="h-4 w-4 rounded-sm border-2 border-accent" />
               </span>
-              Tap to take a photo
+              {photoUrl ? "Retake" : "Take photo"}
             </button>
-          )}
+            <button
+              type="button"
+              onClick={() => galleryInputRef.current?.click()}
+              className="flex flex-1 flex-col items-center justify-center gap-2 rounded-xl border border-dashed border-line bg-surface py-8 text-sm text-dim transition-colors active:bg-surface-2"
+            >
+              <span className="flex h-10 w-10 items-center justify-center rounded-full bg-accent/15">
+                <span className="h-4 w-4 rounded-full border-2 border-accent" />
+              </span>
+              {photoUrl ? "Choose again" : "Choose from gallery"}
+            </button>
+          </div>
         </div>
 
         <div>
