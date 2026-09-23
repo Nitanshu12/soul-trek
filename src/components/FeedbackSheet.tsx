@@ -183,9 +183,14 @@ export default function FeedbackSheet({
 
         <div className="space-y-5">
           <div>
-            <label className="mb-2 block text-xs font-medium uppercase tracking-wider text-muted">
-              Transcript
-            </label>
+            <div className="mb-2 flex items-center justify-between gap-3">
+              <label className="text-xs font-medium uppercase tracking-wider text-muted">
+                Transcript
+              </label>
+              <span className="rounded-md bg-surface-2 px-2 py-0.5 text-[11px] font-medium text-dim">
+                Hinglish · Roman script
+              </span>
+            </div>
             <textarea
               value={transcript}
               onChange={(e) => setTranscript(e.target.value)}

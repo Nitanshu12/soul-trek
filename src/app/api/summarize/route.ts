@@ -22,6 +22,11 @@ export async function POST(req: Request) {
     body: JSON.stringify({
       model: "openai/gpt-oss-20b",
       temperature: 0.3,
+      // gpt-oss is a reasoning model: at default effort it can spend its whole
+      // token budget "thinking" and return empty content (finish_reason "length").
+      // Low effort is plenty for a short summary and avoids that failure mode.
+      reasoning_effort: "low",
+      max_completion_tokens: 1024,
       messages: [
         {
           role: "system",
