@@ -28,6 +28,10 @@ create table if not exists students (
   bus_id uuid not null references buses(id) on delete cascade,
   name text not null,
   enrollment_number text,
+  -- One-time overall verdict set at the end of the event by that bus's
+  -- volunteer/mentor — distinct from the per-session satisfaction tag on
+  -- feedback_entries, which is recorded after each individual session.
+  final_mark text check (final_mark in ('satisfactory', 'unsatisfactory')),
   created_at timestamptz not null default now()
 );
 

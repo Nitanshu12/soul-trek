@@ -118,9 +118,17 @@ export default function VolunteerApp({ busId }: { busId: string }) {
       bus_id: busId,
       name,
       enrollment_number: enrollmentNumber || null,
+      final_mark: null,
       created_at: new Date().toISOString(),
       synced: 0,
     });
+    flushSync();
+  }
+
+  async function setFinalMark(studentId: string, mark: "satisfactory" | "unsatisfactory" | null) {
+    const student = students.find((s) => s.id === studentId);
+    if (!student) return;
+    await db.students.put({ ...student, final_mark: mark, synced: 0 });
     flushSync();
   }
 
@@ -276,6 +284,7 @@ export default function VolunteerApp({ busId }: { busId: string }) {
         search={studentSearch}
         onSearchChange={setStudentSearch}
         onAddStudent={addStudent}
+        onSetFinalMark={setFinalMark}
         onOpenFeedback={(id) => {
           if (!effectiveSessionId) return;
           setActiveStudentId(id);

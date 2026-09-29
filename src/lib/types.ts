@@ -25,11 +25,16 @@ export interface Session {
   synced: 0 | 1;
 }
 
+export type Satisfaction = "satisfactory" | "unsatisfactory";
+
 export interface Student {
   id: string;
   bus_id: string;
   name: string;
   enrollment_number: string | null;
+  // A one-time overall verdict set at the end of the event, distinct from the
+  // per-session satisfaction tag on FeedbackEntry below.
+  final_mark: Satisfaction | null;
   created_at: string;
   synced: 0 | 1;
 }
@@ -42,8 +47,6 @@ export interface PendingRecording {
   blob: Blob;
   created_at: string;
 }
-
-export type Satisfaction = "satisfactory" | "unsatisfactory";
 
 export interface FeedbackEntry {
   id: string;

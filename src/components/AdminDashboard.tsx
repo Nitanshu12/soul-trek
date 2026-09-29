@@ -24,7 +24,7 @@ interface FeedbackRow {
   satisfaction: Satisfaction | null;
   notes: string;
   created_at: string;
-  students: { name: string; enrollment_number: string | null } | null;
+  students: { name: string; enrollment_number: string | null; final_mark: Satisfaction | null } | null;
   buses: { name: string } | null;
   sessions: { label: string; date: string } | null;
 }
@@ -69,6 +69,24 @@ function SatisfactionBadge({ value }: { value: Satisfaction | null }) {
   );
 }
 
+// The one-time final verdict on the student, as opposed to SatisfactionBadge
+// above which is per-session. Shown as a bold single letter to read as
+// visually distinct at a glance.
+function FinalMarkBadge({ value }: { value: Satisfaction | null }) {
+  if (!value) return null;
+  const ok = value === "satisfactory";
+  return (
+    <span
+      title={ok ? "Final mark: Satisfactory" : "Final mark: Unsatisfactory"}
+      className={`flex h-6 w-6 shrink-0 items-center justify-center rounded-md text-xs font-bold ${
+        ok ? "bg-ok text-bg" : "bg-danger text-bg"
+      }`}
+    >
+      {ok ? "S" : "U"}
+    </span>
+  );
+}
+
 export default function AdminDashboard({ adminName }: { adminName: string }) {
   const router = useRouter();
   const supabase = useMemo(() => createClient(), []);
@@ -101,7 +119,7 @@ export default function AdminDashboard({ adminName }: { adminName: string }) {
         supabase.from("sessions").select("id, label, date").order("date"),
         supabase
           .from("feedback_entries")
-          .select("*, students(name, enrollment_number), buses(name), sessions(label, date)")
+          .select("*, students(name, enrollment_number, final_mark), buses(name), sessions(label, date)")
           .order("created_at", { ascending: false }),
         supabase
           .from("complaints")
@@ -206,9 +224,12 @@ export default function AdminDashboard({ adminName }: { adminName: string }) {
 
       {profileStudent && (
         <StudentProfile
+          studentId={profileStudent.id}
           studentName={profileStudent.name}
           entries={entries.filter((e) => e.student_id === profileStudent.id)}
           complaints={complaints.filter((c) => c.student_id === profileStudent.id)}
+          supabase={supabase}
+          onChange={refetchAll}
           onClose={() => setProfileStudent(null)}
         />
       )}
@@ -730,6 +751,7 @@ function FeedbackTab({
                     </p>
                   </button>
                   <div className="flex shrink-0 items-center gap-1.5">
+                    <FinalMarkBadge value={e.students?.final_mark ?? null} />
                     <SatisfactionBadge value={e.satisfaction} />
                     {e.marks != null && (
                       <span className="rounded-md bg-surface-2 px-2 py-1 text-xs font-semibold text-accent-soft">
@@ -920,14 +942,20 @@ function ComplaintsTab({
 }
 
 function StudentProfile({
+  studentId,
   studentName,
   entries,
   complaints,
+  supabase,
+  onChange,
   onClose,
 }: {
+  studentId: string;
   studentName: string;
   entries: FeedbackRow[];
   complaints: ComplaintRow[];
+  supabase: ReturnType<typeof createClient>;
+  onChange: () => void;
   onClose: () => void;
 }) {
   const marksGiven = entries.filter((e) => e.marks != null).map((e) => e.marks as number);
@@ -938,6 +966,31 @@ function StudentProfile({
   const unsatisfactoryCount = entries.filter((e) => e.satisfaction === "unsatisfactory").length;
   const enrollmentNumber = entries.find((e) => e.students?.enrollment_number)?.students
     ?.enrollment_number;
+
+  // Don't rely on `entries` for this — a student reached via a complaint may have
+  // no feedback entries at all, and the mark needs to be correct either way.
+  const [finalMark, setFinalMarkState] = useState<Satisfaction | null>(
+    entries.find((e) => e.students?.final_mark)?.students?.final_mark ?? null
+  );
+
+  useEffect(() => {
+    if (!supabase) return;
+    supabase
+      .from("students")
+      .select("final_mark")
+      .eq("id", studentId)
+      .single()
+      .then(({ data }) => {
+        if (data) setFinalMarkState(data.final_mark);
+      });
+  }, [supabase, studentId]);
+
+  async function setFinalMark(mark: Satisfaction | null) {
+    if (!supabase) return;
+    setFinalMarkState(mark);
+    await supabase.from("students").update({ final_mark: mark }).eq("id", studentId);
+    onChange();
+  }
 
   return (
     <div className="fixed inset-0 z-40 flex flex-col bg-bg">
@@ -959,6 +1012,40 @@ function StudentProfile({
       </header>
 
       <div className="flex-1 overflow-y-auto px-5 py-5">
+        <div className="mb-6 rounded-2xl border border-line bg-surface p-4">
+          <p className="mb-2.5 text-xs font-medium uppercase tracking-wider text-muted">
+            Final evaluation
+          </p>
+          <p className="mb-3 text-xs leading-relaxed text-muted">
+            One-time overall verdict, set by the bus volunteer at the end of the event.
+            Setting it here overrides whatever they chose.
+          </p>
+          <div className="grid grid-cols-2 gap-2.5">
+            <button
+              onClick={() => setFinalMark(finalMark === "satisfactory" ? null : "satisfactory")}
+              className={`rounded-lg py-2.5 text-sm font-semibold transition-colors ${
+                finalMark === "satisfactory"
+                  ? "bg-ok/20 text-ok ring-1 ring-ok/40"
+                  : "border border-line bg-surface-2 text-dim"
+              }`}
+            >
+              Satisfactory
+            </button>
+            <button
+              onClick={() =>
+                setFinalMark(finalMark === "unsatisfactory" ? null : "unsatisfactory")
+              }
+              className={`rounded-lg py-2.5 text-sm font-semibold transition-colors ${
+                finalMark === "unsatisfactory"
+                  ? "bg-danger/20 text-danger ring-1 ring-danger/40"
+                  : "border border-line bg-surface-2 text-dim"
+              }`}
+            >
+              Unsatisfactory
+            </button>
+          </div>
+        </div>
+
         <div className="mb-6 grid grid-cols-3 gap-2.5">
           <div className="rounded-xl border border-line bg-surface p-3 text-center">
             <p className="text-lg font-semibold">{avgMarks ?? "—"}</p>

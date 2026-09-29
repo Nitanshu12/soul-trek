@@ -1,7 +1,7 @@
 "use client";
 
 import { useState } from "react";
-import type { FeedbackEntry, Student } from "@/lib/types";
+import type { FeedbackEntry, Satisfaction, Student } from "@/lib/types";
 
 export default function StudentList({
   students,
@@ -11,6 +11,7 @@ export default function StudentList({
   search,
   onSearchChange,
   onAddStudent,
+  onSetFinalMark,
   onOpenFeedback,
 }: {
   students: Student[];
@@ -20,6 +21,7 @@ export default function StudentList({
   search: string;
   onSearchChange: (value: string) => void;
   onAddStudent: (name: string, enrollmentNumber: string) => void;
+  onSetFinalMark: (studentId: string, mark: Satisfaction | null) => void;
   onOpenFeedback: (studentId: string) => void;
 }) {
   const [adding, setAdding] = useState(false);
@@ -28,6 +30,7 @@ export default function StudentList({
 
   const doneStudentIds = new Set(entries.map((e) => e.student_id));
   const doneCount = students.filter((s) => doneStudentIds.has(s.id)).length;
+  const markedCount = students.filter((s) => s.final_mark).length;
 
   return (
     <>
@@ -47,9 +50,10 @@ export default function StudentList({
           </p>
         )}
 
-        {students.length > 0 && sessionSelected && (
+        {students.length > 0 && (
           <p className="mb-3 px-1 text-xs font-medium uppercase tracking-wider text-muted">
-            {doneCount} of {students.length} recorded
+            {sessionSelected && `${doneCount} of ${students.length} recorded · `}
+            {markedCount} of {students.length} given a final mark
           </p>
         )}
 
@@ -64,29 +68,66 @@ export default function StudentList({
             {students.map((student) => {
               const done = doneStudentIds.has(student.id);
               return (
-                <li key={student.id}>
+                <li
+                  key={student.id}
+                  className="flex items-center gap-2 rounded-xl border border-line bg-surface pl-4 pr-2.5 py-2.5"
+                >
                   <button
                     onClick={() => onOpenFeedback(student.id)}
-                    className="flex w-full items-center justify-between gap-3 rounded-xl border border-line bg-surface px-4 py-4 text-left transition-colors active:bg-surface-2"
+                    className="min-w-0 flex-1 py-1.5 text-left"
                   >
-                    <div className="min-w-0">
-                      <p className="truncate text-sm font-medium">{student.name}</p>
-                      {student.enrollment_number && (
-                        <p className="mt-0.5 truncate text-xs text-muted">
-                          {student.enrollment_number}
-                        </p>
-                      )}
-                    </div>
-                    {sessionSelected && (
-                      <span
-                        className={`shrink-0 rounded-md px-2 py-1 text-xs font-medium ${
-                          done ? "bg-ok/15 text-ok" : "bg-surface-2 text-muted"
-                        }`}
-                      >
-                        {done ? "Recorded" : "Pending"}
-                      </span>
+                    <p className="truncate text-sm font-medium">{student.name}</p>
+                    {student.enrollment_number && (
+                      <p className="mt-0.5 truncate text-xs text-muted">
+                        {student.enrollment_number}
+                      </p>
                     )}
                   </button>
+
+                  {sessionSelected && (
+                    <span
+                      className={`shrink-0 rounded-md px-2 py-1 text-xs font-medium ${
+                        done ? "bg-ok/15 text-ok" : "bg-surface-2 text-muted"
+                      }`}
+                    >
+                      {done ? "Recorded" : "Pending"}
+                    </span>
+                  )}
+
+                  <div className="flex shrink-0 gap-1">
+                    <button
+                      onClick={() =>
+                        onSetFinalMark(
+                          student.id,
+                          student.final_mark === "satisfactory" ? null : "satisfactory"
+                        )
+                      }
+                      aria-label={`Mark ${student.name} satisfactory`}
+                      className={`flex h-8 w-8 items-center justify-center rounded-lg text-sm font-bold transition-colors ${
+                        student.final_mark === "satisfactory"
+                          ? "bg-ok text-bg"
+                          : "border border-line text-muted"
+                      }`}
+                    >
+                      S
+                    </button>
+                    <button
+                      onClick={() =>
+                        onSetFinalMark(
+                          student.id,
+                          student.final_mark === "unsatisfactory" ? null : "unsatisfactory"
+                        )
+                      }
+                      aria-label={`Mark ${student.name} unsatisfactory`}
+                      className={`flex h-8 w-8 items-center justify-center rounded-lg text-sm font-bold transition-colors ${
+                        student.final_mark === "unsatisfactory"
+                          ? "bg-danger text-bg"
+                          : "border border-line text-muted"
+                      }`}
+                    >
+                      U
+                    </button>
+                  </div>
                 </li>
               );
             })}

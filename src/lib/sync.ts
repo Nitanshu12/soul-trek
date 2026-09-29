@@ -35,6 +35,7 @@ export async function syncUp(): Promise<void> {
       bus_id: s.bus_id,
       name: s.name,
       enrollment_number: s.enrollment_number,
+      final_mark: s.final_mark,
       created_at: s.created_at,
     }));
     await pushTable<FeedbackEntry>("entries", "feedback_entries", (e) => ({
