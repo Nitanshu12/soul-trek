@@ -192,6 +192,24 @@ create policy "id_cards_read_authenticated" on storage.objects
 create policy "id_cards_insert_authenticated" on storage.objects
   for insert with check (bucket_id = 'id-cards' and auth.uid() is not null);
 
+-- ---------- app_config: single-row config for cross-batch resets ----------
+-- data_version is bumped whenever the admin starts a new batch; phones compare
+-- it to their last-seen value and wipe their local cache when it changes.
+
+create table if not exists app_config (
+  id boolean primary key default true,
+  data_version integer not null default 1,
+  constraint app_config_singleton check (id)
+);
+
+insert into app_config (id, data_version) values (true, 1)
+on conflict (id) do nothing;
+
+alter table app_config enable row level security;
+
+create policy "app_config_select_authenticated" on app_config
+  for select using (auth.uid() is not null);
+
 -- ---------- final_data view: the end-of-event export, one row per student ----------
 -- security_invoker makes it respect the querying user's own RLS instead of the
 -- view owner's (Supabase's postgres role has BYPASSRLS, which would otherwise

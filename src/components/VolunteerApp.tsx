@@ -15,6 +15,7 @@ import {
   syncComplaintsUp,
 } from "@/lib/complaints";
 import { getVolunteerName, setVolunteerName } from "@/lib/auth";
+import { checkBatchReset } from "@/lib/batch";
 import { useOnline } from "@/lib/useOnline";
 import type { BusVolunteer, Session, Student, FeedbackEntry } from "@/lib/types";
 import SessionPicker from "./SessionPicker";
@@ -66,6 +67,11 @@ export default function VolunteerApp({ busId }: { busId: string }) {
 
   useEffect(() => {
     const run = async () => {
+      // A new batch wipes this phone's cache and reloads so old students are gone.
+      if (await checkBatchReset()) {
+        window.location.reload();
+        return;
+      }
       await syncDown();
       await syncComplaintsDown();
       await processPendingRecordings();

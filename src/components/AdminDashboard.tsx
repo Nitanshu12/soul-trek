@@ -801,7 +801,74 @@ function FinalDataTab({
           {rows.length ? "No learners match these filters." : "No learners yet."}
         </EmptyNote>
       )}
+
+      <DangerZone />
     </div>
+  );
+}
+
+function DangerZone() {
+  const [confirmText, setConfirmText] = useState("");
+  const [busy, setBusy] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+
+  async function reset() {
+    setBusy(true);
+    setError(null);
+    const res = await fetch("/api/admin/reset-batch", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ confirm: true }),
+    });
+    const data = await res.json();
+    if (!res.ok) {
+      setError(data.error ?? "Reset failed");
+      setBusy(false);
+      return;
+    }
+    // Buses, students, feedback and logins are gone now — reload so the admin
+    // starts fresh on an empty dashboard.
+    window.location.reload();
+  }
+
+  return (
+    <section className="mt-8 rounded-2xl border border-danger/40 bg-danger/5 p-5">
+      <h2 className="text-sm font-semibold text-danger">Start a new batch</h2>
+      <p className="mt-2 text-xs leading-relaxed text-dim">
+        This permanently deletes <strong>all</strong> students, sessions, feedback,
+        complaints, ID-card photos, buses, and volunteer logins — for every bus. Volunteers&apos;
+        phones clear their old data automatically the next time they open the app.
+      </p>
+      <p className="mt-2 text-xs font-medium leading-relaxed text-danger">
+        Export the Final Data CSV (all buses) and save it first. This cannot be undone.
+      </p>
+
+      <label className="mt-4 mb-1.5 block text-xs font-medium text-dim">
+        Type RESET to confirm
+      </label>
+      <input
+        value={confirmText}
+        onChange={(e) => setConfirmText(e.target.value)}
+        placeholder="RESET"
+        autoCapitalize="characters"
+        autoCorrect="off"
+        className="w-full rounded-lg border border-line bg-surface-2 px-3.5 py-2.5 text-sm text-fg focus:border-danger"
+      />
+
+      {error && (
+        <p className="mt-2 rounded-lg border border-danger/30 bg-danger/10 px-3 py-2 text-xs text-danger">
+          {error}
+        </p>
+      )}
+
+      <button
+        onClick={reset}
+        disabled={busy || confirmText.trim() !== "RESET"}
+        className="mt-3 w-full rounded-lg bg-danger py-2.5 text-sm font-semibold text-bg transition-opacity active:opacity-80 disabled:opacity-30"
+      >
+        {busy ? "Clearing everything…" : "Delete all data & start new batch"}
+      </button>
+    </section>
   );
 }
 

@@ -5,6 +5,7 @@ import Link from "next/link";
 import { useLiveQuery } from "dexie-react-hooks";
 import { db } from "@/lib/db";
 import { getVolunteerName } from "@/lib/auth";
+import { checkBatchReset } from "@/lib/batch";
 import { useOnline } from "@/lib/useOnline";
 import {
   addComplaint,
@@ -48,6 +49,10 @@ export default function ComplaintsScreen({ busId }: { busId: string }) {
 
   useEffect(() => {
     const run = async () => {
+      if (await checkBatchReset()) {
+        window.location.reload();
+        return;
+      }
       await syncComplaintsDown();
       await processPendingComplaintPhotos();
       await syncComplaintsUp();
