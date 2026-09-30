@@ -192,6 +192,63 @@ create policy "id_cards_read_authenticated" on storage.objects
 create policy "id_cards_insert_authenticated" on storage.objects
   for insert with check (bucket_id = 'id-cards' and auth.uid() is not null);
 
+-- ---------- final_data view: the end-of-event export, one row per student ----------
+-- security_invoker makes it respect the querying user's own RLS instead of the
+-- view owner's (Supabase's postgres role has BYPASSRLS, which would otherwise
+-- let a volunteer see every bus through this view instead of just their own).
+
+create or replace view public.final_data
+with (security_invoker = true)
+as
+select
+  s.id as student_id,
+  s.bus_id,
+  b.name as bus_name,
+  s.name as student_name,
+  s.enrollment_number,
+  coalesce(
+    (select string_agg(distinct sess.label, ', ' order by sess.label)
+       from feedback_entries fe
+       join sessions sess on sess.id = fe.session_id
+      where fe.student_id = s.id),
+    ''
+  ) as sessions,
+  coalesce(
+    (select string_agg(
+              sess.label || ': ' || coalesce(nullif(fe.transcript, ''), '(no transcript)'),
+              e'\n\n' order by sess.date, sess.label
+            )
+       from feedback_entries fe
+       join sessions sess on sess.id = fe.session_id
+      where fe.student_id = s.id),
+    ''
+  ) as transcription,
+  coalesce(
+    (select string_agg(
+              sess.label || ': ' || coalesce(nullif(fe.ai_summary, ''), '(no summary)'),
+              e'\n\n' order by sess.date, sess.label
+            )
+       from feedback_entries fe
+       join sessions sess on sess.id = fe.session_id
+      where fe.student_id = s.id),
+    ''
+  ) as summary,
+  case
+    when exists (select 1 from complaints c where c.student_id = s.id)
+      then coalesce(
+        (select string_agg(coalesce(nullif(c.notes, ''), '(no notes)'), '; ')
+           from complaints c
+          where c.student_id = s.id),
+        'Yes'
+      )
+    else ''
+  end as complaint,
+  s.final_mark
+from students s
+join buses b on b.id = s.bus_id;
+
+grant select on public.final_data to authenticated;
+
 -- ---------- Bootstrap: make yourself an admin ----------
 -- 1. Supabase dashboard -> Authentication -> Users -> Add user.
 --    Use your real email and a password, and tick "Auto Confirm User".

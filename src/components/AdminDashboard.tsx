@@ -42,7 +42,20 @@ interface ComplaintRow {
   buses: { name: string } | null;
 }
 
-type Tab = "feedback" | "complaints" | "buses" | "volunteers" | "share";
+type Tab = "feedback" | "complaints" | "buses" | "volunteers" | "final" | "share";
+
+interface FinalDataRow {
+  student_id: string;
+  bus_id: string;
+  bus_name: string;
+  student_name: string;
+  enrollment_number: string | null;
+  sessions: string;
+  transcription: string;
+  summary: string;
+  complaint: string;
+  final_mark: Satisfaction | null;
+}
 
 interface VolunteerProfile {
   id: string;
@@ -172,6 +185,7 @@ export default function AdminDashboard({ adminName }: { adminName: string }) {
               ["complaints", `Complaints${openComplaintCount ? ` (${openComplaintCount})` : ""}`],
               ["buses", "Buses"],
               ["volunteers", "Volunteers"],
+              ["final", "Final Data"],
               ["share", "Share"],
             ] as [Tab, string][]
           ).map(([key, label]) => (
@@ -210,6 +224,12 @@ export default function AdminDashboard({ adminName }: { adminName: string }) {
           />
         ) : tab === "volunteers" ? (
           <VolunteersTab buses={buses} volunteers={volunteerLogins} onChange={refetchAll} />
+        ) : tab === "final" ? (
+          <FinalDataTab
+            buses={buses}
+            supabase={supabase}
+            onViewProfile={(id, name) => setProfileStudent({ id, name })}
+          />
         ) : tab === "share" ? (
           <ShareTab />
         ) : (
@@ -615,6 +635,172 @@ function VolunteersTab({
           <EmptyNote>No logins yet.</EmptyNote>
         )}
       </div>
+    </div>
+  );
+}
+
+function FinalDataTab({
+  buses,
+  supabase,
+  onViewProfile,
+}: {
+  buses: Bus[];
+  supabase: ReturnType<typeof createClient>;
+  onViewProfile: (studentId: string, name: string) => void;
+}) {
+  const [rows, setRows] = useState<FinalDataRow[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState<string | null>(null);
+  const [busFilter, setBusFilter] = useState("");
+  const [search, setSearch] = useState("");
+
+  useEffect(() => {
+    if (!supabase) return;
+    supabase
+      .from("final_data")
+      .select("*")
+      .order("bus_name")
+      .order("student_name")
+      .then(({ data, error: fetchError }) => {
+        if (fetchError) {
+          setError(
+            fetchError.message.includes("final_data")
+              ? "The final_data view doesn't exist yet — run migration-add-final-data-view.sql in the Supabase SQL editor."
+              : fetchError.message
+          );
+        } else {
+          setRows((data as FinalDataRow[]) ?? []);
+        }
+        setLoading(false);
+      });
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
+  const filtered = rows.filter((r) => {
+    if (busFilter && r.bus_id !== busFilter) return false;
+    if (search && !r.student_name.toLowerCase().includes(search.toLowerCase())) return false;
+    return true;
+  });
+
+  function exportCsv() {
+    const header = [
+      "Student Name",
+      "Enrollment Number",
+      "Bus",
+      "Sessions",
+      "Transcription",
+      "Summary",
+      "Complaint",
+      "Final Mark",
+    ];
+    const csvRows = filtered.map((r) => [
+      r.student_name,
+      r.enrollment_number ?? "",
+      r.bus_name,
+      r.sessions,
+      r.transcription,
+      r.summary,
+      r.complaint,
+      r.final_mark === "satisfactory"
+        ? "Satisfactory"
+        : r.final_mark === "unsatisfactory"
+          ? "Unsatisfactory"
+          : "",
+    ]);
+    const csv = [header, ...csvRows]
+      .map((row) => row.map((cell) => `"${String(cell).replace(/"/g, '""')}"`).join(","))
+      .join("\n");
+    const blob = new Blob(["﻿" + csv], { type: "text/csv;charset=utf-8;" });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement("a");
+    a.href = url;
+    const busLabel = busFilter ? buses.find((b) => b.id === busFilter)?.name ?? "bus" : "all-buses";
+    a.download = `soul-trek-final-data-${busLabel.toLowerCase().replace(/\s+/g, "-")}.csv`;
+    a.click();
+    URL.revokeObjectURL(url);
+  }
+
+  if (loading) {
+    return <p className="py-12 text-center text-sm text-muted">Loading…</p>;
+  }
+
+  if (error) {
+    return (
+      <p className="rounded-lg border border-danger/30 bg-danger/10 px-3.5 py-3 text-sm text-danger">
+        {error}
+      </p>
+    );
+  }
+
+  return (
+    <div className="space-y-5">
+      <p className="text-xs leading-relaxed text-muted">
+        One row per learner: every session they have feedback for, all transcripts and AI
+        summaries combined, any complaint filed, and their final mark. This is the export to
+        take away once the event is over.
+      </p>
+
+      <div className="space-y-2.5 rounded-2xl border border-line bg-surface p-4">
+        <input
+          value={search}
+          onChange={(e) => setSearch(e.target.value)}
+          placeholder="Search learner name…"
+          className={inputClass}
+        />
+        <select
+          value={busFilter}
+          onChange={(e) => setBusFilter(e.target.value)}
+          className={inputClass}
+        >
+          <option value="">All buses</option>
+          {buses.map((b) => (
+            <option key={b.id} value={b.id}>
+              {b.name}
+            </option>
+          ))}
+        </select>
+        <button
+          onClick={exportCsv}
+          disabled={!filtered.length}
+          className="w-full rounded-lg bg-accent py-2.5 text-sm font-semibold text-accent-ink transition-opacity active:opacity-80 disabled:opacity-30"
+        >
+          Export {filtered.length} {filtered.length === 1 ? "row" : "rows"} to CSV
+        </button>
+      </div>
+
+      {filtered.length ? (
+        <ul className="space-y-2">
+          {filtered.map((r) => (
+            <li key={r.student_id}>
+              <button
+                onClick={() => onViewProfile(r.student_id, r.student_name)}
+                className="flex w-full items-center justify-between gap-3 rounded-xl border border-line bg-surface px-4 py-3.5 text-left transition-colors active:bg-surface-2"
+              >
+                <div className="min-w-0">
+                  <p className="truncate text-sm font-medium">
+                    {r.student_name}
+                    {r.enrollment_number && (
+                      <span className="ml-1.5 font-normal text-muted">
+                        · {r.enrollment_number}
+                      </span>
+                    )}
+                  </p>
+                  <p className="mt-0.5 truncate text-xs text-muted">
+                    {r.bus_name}
+                    {r.sessions && ` · ${r.sessions}`}
+                    {r.complaint && " · has complaint"}
+                  </p>
+                </div>
+                <FinalMarkBadge value={r.final_mark} />
+              </button>
+            </li>
+          ))}
+        </ul>
+      ) : (
+        <EmptyNote>
+          {rows.length ? "No learners match these filters." : "No learners yet."}
+        </EmptyNote>
+      )}
     </div>
   );
 }
